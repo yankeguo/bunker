@@ -13,8 +13,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/yankeguo/bunker/model"
+	"github.com/yankeguo/bunker/model/dao"
 	"github.com/yankeguo/ufx"
 	"go.uber.org/fx"
 	"golang.org/x/crypto/ed25519"
@@ -26,6 +29,8 @@ const (
 	sshHostKeyFileRSA     = "ssh_host_rsa_key"
 	sshHostKeyFileECDSA   = "ssh_host_ecdsa_key"
 	sshHostKeyFileEd25519 = "ssh_host_ed25519_key"
+
+	sshExtKeyUserID = "bunker.user_id"
 )
 
 type SSHServerParams struct {
@@ -125,14 +130,32 @@ func (s *SSHServer) ensureHostSigners() (err error) {
 	return
 }
 
-func (s *SSHServer) HandleServerConn(conn net.Conn) {
-	defer conn.Close()
-
-	var err error
-
+func (s *SSHServer) createServerConfig() *ssh.ServerConfig {
 	cfg := &ssh.ServerConfig{
-		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-			return nil, nil
+		AuthLogCallback: func(conn ssh.ConnMetadata, method string, err error) {
+			log.Println("auth:", conn.RemoteAddr(), conn.User(), method, err)
+		},
+		PublicKeyCallback: func(conn ssh.ConnMetadata, _key ssh.PublicKey) (perm *ssh.Permissions, err error) {
+			db := dao.Use(s.Database)
+
+			var key *model.Key
+			if key, err = db.Key.Where(dao.Key.ID.Eq(
+				strings.ToLower(ssh.FingerprintSHA256(_key)),
+			)).First(); err != nil {
+				return nil, err
+			}
+
+			var user *model.User
+			if user, err = db.User.Where(dao.User.ID.Eq(key.UserID)).First(); err != nil {
+				return nil, err
+			}
+
+			perm = &ssh.Permissions{
+				Extensions: map[string]string{
+					sshExtKeyUserID: user.ID,
+				},
+			}
+			return
 		},
 		BannerCallback: func(conn ssh.ConnMetadata) string {
 			return "bunker from github.com/yankeguo/bunker"
@@ -143,13 +166,21 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 		cfg.AddHostKey(sgn)
 	}
 
+	return cfg
+}
+
+func (s *SSHServer) HandleServerConn(conn net.Conn) {
+	defer conn.Close()
+
+	var err error
+
 	var (
 		sc    *ssh.ServerConn
 		chNew <-chan ssh.NewChannel
 		chReq <-chan *ssh.Request
 	)
 
-	if sc, chNew, chReq, err = ssh.NewServerConn(conn, cfg); err != nil {
+	if sc, chNew, chReq, err = ssh.NewServerConn(conn, s.createServerConfig()); err != nil {
 		return
 	}
 
