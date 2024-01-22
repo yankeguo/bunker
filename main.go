@@ -1,11 +1,13 @@
 package main
 
 import (
+	"flag"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/yankeguo/rg"
 	"github.com/yankeguo/ufx"
@@ -18,8 +20,13 @@ func installStatic(ur ufx.Router) {
 }
 
 func main() {
+	var optDataDir string
+
+	flag.StringVar(&optDataDir, "data-dir", "", "data directory")
+	flag.Parse()
+
 	app := fx.New(
-		ufx.ProvideConfFromYAMLFile("bunker.yaml"),
+		ufx.ProvideConfFromYAMLFile(filepath.Join(optDataDir, "bunker.yaml")),
 		ufx.Module,
 		fx.Invoke(installStatic),
 	)
