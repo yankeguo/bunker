@@ -19,3 +19,9 @@
 
 # Go workspace file
 go.work
+
+# Binary
+/bunker
+
+# Config
+/conf.yaml

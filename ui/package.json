@@ -1,0 +1,27 @@
+{
+  "name": "bunker-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "devDependencies": {
+    "@vueuse/components": "^10.7.2",
+    "@vueuse/core": "^10.7.2",
+    "@vueuse/nuxt": "^10.7.2",
+    "nuxt": "^3.9.3",
+    "vue": "^3.4.14",
+    "vue-router": "^4.2.5"
+  },
+  "dependencies": {
+    "@iconify-json/mdi": "^1.1.64",
+    "@iconify-json/noto-v1": "^1.1.11",
+    "@iconify-json/simple-icons": "^1.1.89",
+    "@nuxt/ui": "^2.12.3",
+    "@tailwindcss/typography": "^0.5.10"
+  }
+}
