@@ -20,8 +20,9 @@
 # Go workspace file
 go.work
 
-# Binary
+# Binary and Config
 /bunker
-
-# Config
 /bunker.yaml
+
+# Database
+/database.sqlite3
