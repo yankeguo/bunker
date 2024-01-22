@@ -25,9 +25,11 @@ func main() {
 	app := fx.New(
 		fx.Supply(DataDir(optDataDir)),
 		fx.Provide(createDatabase),
+		fx.Provide(createSSHServerParams, createSSHServer),
 		ufx.ProvideConfFromYAMLFile(filepath.Join(optDataDir, "bunker.yaml")),
 		ufx.Module,
 		fx.Invoke(installStatic),
+		fx.Invoke(func(s *SSHServer) {}),
 	)
 	if app.Err() != nil {
 		log.Println(app.Err().Error())
