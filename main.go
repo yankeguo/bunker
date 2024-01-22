@@ -19,7 +19,7 @@ func installStatic(ur ufx.Router) {
 
 func main() {
 	app := fx.New(
-		ufx.ProvideConfFromYAMLFile("conf.yaml"),
+		ufx.ProvideConfFromYAMLFile("bunker.yaml"),
 		ufx.Module,
 		fx.Invoke(installStatic),
 	)
