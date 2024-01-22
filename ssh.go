@@ -2,17 +2,9 @@ package main
 
 import (
 	"context"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/rsa"
-	"encoding/pem"
 	"errors"
 	"log"
 	"net"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,16 +12,11 @@ import (
 	"github.com/yankeguo/bunker/model/dao"
 	"github.com/yankeguo/ufx"
 	"go.uber.org/fx"
-	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 )
 
 const (
-	sshHostKeyFileRSA     = "ssh_host_rsa_key"
-	sshHostKeyFileECDSA   = "ssh_host_ecdsa_key"
-	sshHostKeyFileEd25519 = "ssh_host_ed25519_key"
-
 	sshExtKeyUserID = "bunker.user_id"
 )
 
@@ -46,9 +33,9 @@ type SSHServer struct {
 	DataDir  string
 	Params   SSHServerParams
 	Database *gorm.DB
+	Signers  *Signers
 
-	listener    *net.TCPListener
-	hostSigners []ssh.Signer
+	listener *net.TCPListener
 }
 
 type SSHServerOptions struct {
@@ -58,76 +45,7 @@ type SSHServerOptions struct {
 	Params   SSHServerParams
 	DataDir  DataDir
 	Database *gorm.DB
-}
-
-func (s *SSHServer) ensureHostSigner(filename string, generator func() (key crypto.PrivateKey, err error)) (err error) {
-	var (
-		sgn ssh.Signer
-		buf []byte
-	)
-	if buf, err = os.ReadFile(filename); err == nil {
-		if sgn, err = ssh.ParsePrivateKey(buf); err != nil {
-			return
-		}
-		log.Println("host signer loaded from:", filename)
-		s.hostSigners = append(s.hostSigners, sgn)
-	} else {
-		if !os.IsNotExist(err) {
-			return
-		}
-
-		var key crypto.PrivateKey
-		if key, err = generator(); err != nil {
-			return
-		}
-		if sgn, err = ssh.NewSignerFromKey(key); err != nil {
-			return
-		}
-
-		s.hostSigners = append(s.hostSigners, sgn)
-
-		var block *pem.Block
-		if block, err = ssh.MarshalPrivateKey(key, ""); err != nil {
-			return
-		}
-
-		buf = pem.EncodeToMemory(block)
-		if err = os.WriteFile(filename, buf, 0600); err != nil {
-			return
-		}
-
-		log.Println("host signer generated to:", filename)
-	}
-	return
-}
-
-func (s *SSHServer) ensureHostSigners() (err error) {
-	fileRSA := filepath.Join(s.DataDir, sshHostKeyFileRSA)
-
-	if err = s.ensureHostSigner(fileRSA, func() (crypto.PrivateKey, error) {
-		return rsa.GenerateKey(rand.Reader, 2048)
-	}); err != nil {
-		return
-	}
-
-	fileECDSA := filepath.Join(s.DataDir, sshHostKeyFileECDSA)
-
-	if err = s.ensureHostSigner(fileECDSA, func() (crypto.PrivateKey, error) {
-		return ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	}); err != nil {
-		return
-	}
-
-	fileEd25519 := filepath.Join(s.DataDir, sshHostKeyFileEd25519)
-
-	if err = s.ensureHostSigner(fileEd25519, func() (crypto.PrivateKey, error) {
-		_, priv, err := ed25519.GenerateKey(rand.Reader)
-		return priv, err
-	}); err != nil {
-		return
-	}
-
-	return
+	Signers  *Signers
 }
 
 func (s *SSHServer) createServerConfig() *ssh.ServerConfig {
@@ -162,7 +80,7 @@ func (s *SSHServer) createServerConfig() *ssh.ServerConfig {
 		},
 	}
 
-	for _, sgn := range s.hostSigners {
+	for _, sgn := range s.Signers.Host {
 		cfg.AddHostKey(sgn)
 	}
 
@@ -227,10 +145,7 @@ func createSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 	s = &SSHServer{
 		DataDir: opts.DataDir.String(),
 		Params:  opts.Params,
-	}
-
-	if err = s.ensureHostSigners(); err != nil {
-		return
+		Signers: opts.Signers,
 	}
 
 	if opts.Lifecycle != nil {

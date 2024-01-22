@@ -27,5 +27,6 @@ go.work
 # Database
 /database.sqlite3
 
-# SSH Host Keys
+# SSH Keys
 /ssh_host_*_key
+/ssh_client_*_key

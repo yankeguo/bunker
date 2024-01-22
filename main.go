@@ -25,10 +25,10 @@ func main() {
 	app := fx.New(
 		fx.Supply(DataDir(optDataDir)),
 		fx.Provide(createDatabase),
-		fx.Provide(createSSHServerParams, createSSHServer),
+		fx.Provide(createSSHServerParams, createSSHServer, createSigners),
 		ufx.ProvideConfFromYAMLFile(filepath.Join(optDataDir, "bunker.yaml")),
 		ufx.Module,
-		fx.Invoke(installStatic),
+		fx.Invoke(installStatic, installAPIAuthorizedKeys),
 		fx.Invoke(func(s *SSHServer) {}),
 	)
 	if app.Err() != nil {
