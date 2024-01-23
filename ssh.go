@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/git-lfs/wildmatch"
@@ -158,18 +160,33 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 	var err error
 
 	var (
-		sc    *ssh.ServerConn
-		chNew <-chan ssh.NewChannel
-		chReq <-chan *ssh.Request
+		userConn         *ssh.ServerConn
+		chUserNewChannel <-chan ssh.NewChannel
+		chUserRequest    <-chan *ssh.Request
 	)
 
-	if sc, chNew, chReq, err = ssh.NewServerConn(conn, s.createServerConfig()); err != nil {
+	if userConn, chUserNewChannel, chUserRequest, err = ssh.NewServerConn(conn, s.createServerConfig()); err != nil {
 		return
 	}
+	defer userConn.Close()
 
-	_ = sc
-	_ = chNew
-	_ = chReq
+	var (
+		serverUser    = userConn.Permissions.Extensions[sshExtKeyServerUser]
+		serverAddress = userConn.Permissions.Extensions[sshExtKeyServerAddress]
+	)
+
+	var client *ssh.Client
+	if client, err = ssh.Dial("tcp", serverAddress, &ssh.ClientConfig{
+		User: serverUser,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(s.Signers.Client...),
+		},
+	}); err != nil {
+		return
+	}
+	defer client.Close()
+
+	PipeSSH(client, userConn, chUserNewChannel, chUserRequest)
 }
 
 func (s *SSHServer) ListenAndServe() (err error) {
@@ -236,4 +253,116 @@ func createSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 		})
 	}
 	return
+}
+
+func PipeSSH(target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-chan ssh.NewChannel, chUserRequest <-chan *ssh.Request) {
+	// 'user' stands for the user side
+	// 'target' stands for the target server side
+
+	handleUserNewChannel := func(wg *sync.WaitGroup, userNewChannel ssh.NewChannel) {
+		defer wg.Done()
+
+		// create target channel and target request channel
+		targetChannel, chTargetRequest, err1 := target.OpenChannel(userNewChannel.ChannelType(), userNewChannel.ExtraData())
+		if err1 != nil {
+			log.Println("open channel:", err1)
+			if errOpenFailed, ok := err1.(*ssh.OpenChannelError); ok {
+				userNewChannel.Reject(errOpenFailed.Reason, errOpenFailed.Message)
+			} else {
+				userNewChannel.Reject(ssh.ConnectionFailed, err1.Error())
+			}
+			return
+		}
+		defer targetChannel.Close()
+
+		userChannel, chUserRequest, err1 := userNewChannel.Accept()
+		if err1 != nil {
+			log.Println("accept channel:", err1)
+			return
+		}
+
+		wg1 := &sync.WaitGroup{}
+
+		wg1.Add(1)
+		go func() {
+			defer wg1.Done()
+			io.Copy(userChannel, targetChannel)
+		}()
+
+		wg1.Add(1)
+		go func() {
+			defer wg1.Done()
+			io.Copy(targetChannel, userChannel)
+		}()
+
+		wg1.Add(1)
+		go func() {
+			defer wg1.Done()
+			for targetRequest := range chTargetRequest {
+				ok, err2 := userChannel.SendRequest(targetRequest.Type, targetRequest.WantReply, targetRequest.Payload)
+				if targetRequest.WantReply {
+					targetRequest.Reply(ok, nil)
+				}
+				if err2 != nil {
+					log.Println("send request:", err2)
+				}
+			}
+		}()
+
+		wg1.Add(1)
+		go func() {
+			defer wg1.Done()
+			for userRequest := range chUserRequest {
+				ok, err2 := targetChannel.SendRequest(userRequest.Type, userRequest.WantReply, userRequest.Payload)
+				if userRequest.WantReply {
+					userRequest.Reply(ok, nil)
+				}
+				if err2 != nil {
+					log.Println("send request:", err2)
+				}
+			}
+		}()
+
+		wg1.Wait()
+	}
+
+	handleUserRequest := func(wg *sync.WaitGroup, userRequest *ssh.Request) {
+		defer wg.Done()
+
+		ok, buf, err1 := target.SendRequest(userRequest.Type, userRequest.WantReply, userRequest.Payload)
+		if userRequest.WantReply {
+			userRequest.Reply(ok, buf)
+		}
+		if err1 != nil {
+			log.Println("send request:", err1)
+		}
+	}
+
+	wg := &sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		wg1 := &sync.WaitGroup{}
+		for userNewChannel := range chUserNewChannel {
+			wg1.Add(1)
+			go handleUserNewChannel(wg1, userNewChannel)
+		}
+		wg1.Wait()
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		wg1 := &sync.WaitGroup{}
+		for userRequest := range chUserRequest {
+			wg1.Add(1)
+			go handleUserRequest(wg1, userRequest)
+		}
+		wg1.Wait()
+	}()
+
+	wg.Wait()
 }

@@ -20,12 +20,18 @@ Visit [DockerHub Repository](https://hub.docker.com/repository/docker/yankeguo/b
 - Prepare a `data` directory and put `bunker.yaml` configuration file in it
 - Run contaienr image with `/data` mounted, `docker run -p 8080:8080 -p 8022:8022 -v $PWD/data:/data yankeguo/bunker:latest`
 
-## Initialization
+## Initial Users
 
-Put a `admin.yaml` file in `data-dir` to initialize the system with an admin user.
+Put a `users.yaml` file in `data-dir` to initialize the system with users.
 
 ```yaml
-myusername: mypassword
+username: yanke
+password: qwerty
+is_admin: true
+update_existing: true
+---
+username: guest
+password: guest
 ```
 
 ## Configuration File

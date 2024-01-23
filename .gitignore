@@ -26,6 +26,6 @@ go.work
 # Data
 /bunker.yaml
 /database.sqlite3
-/admin.yaml
+/users.yaml
 /ssh_host_*_key
 /ssh_client_*_key
