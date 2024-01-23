@@ -30,6 +30,7 @@ func main() {
 		ufx.Module,
 		fx.Invoke(installStatic, installAPIAuthorizedKeys),
 		fx.Invoke(func(s *SSHServer) {}),
+		fx.Invoke(initializeAdminUsers),
 	)
 	if app.Err() != nil {
 		log.Println(app.Err().Error())

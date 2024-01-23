@@ -20,13 +20,12 @@
 # Go workspace file
 go.work
 
-# Binary and Config
+# Binary
 /bunker
+
+# Data
 /bunker.yaml
-
-# Database
 /database.sqlite3
-
-# SSH Keys
+/admin.yaml
 /ssh_host_*_key
 /ssh_client_*_key
