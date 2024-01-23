@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"strings"
 	"sync"
@@ -15,16 +15,15 @@ import (
 	"github.com/yankeguo/bunker/model/dao"
 	"github.com/yankeguo/ufx"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 )
 
 const (
-	sshExtKeyError         = "bunker.error"
 	sshExtKeyUserID        = "bunker.user_id"
 	sshExtKeyServerID      = "bunker.server_id"
 	sshExtKeyServerUser    = "bunker.server_user"
-	sshExtKeyServerName    = "bunker.server_name"
 	sshExtKeyServerAddress = "bunker.server_address"
 )
 
@@ -42,6 +41,7 @@ type SSHServer struct {
 	Params   SSHServerParams
 	Database *gorm.DB
 	Signers  *Signers
+	Log      *zap.SugaredLogger
 
 	listener *net.TCPListener
 }
@@ -54,10 +54,15 @@ type SSHServerOptions struct {
 	DataDir  DataDir
 	Database *gorm.DB
 	Signers  *Signers
+	Log      *zap.SugaredLogger
 }
 
 func (s *SSHServer) AuthLogCallback(conn ssh.ConnMetadata, method string, err error) {
-	log.Println("auth:", conn.RemoteAddr(), conn.User(), method, err)
+	s.Log.With(
+		"remote_addr", conn.RemoteAddr().String(),
+		"method", method,
+		"error", err,
+	).Info("ssh auth")
 }
 
 func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey) (perm *ssh.Permissions, err error) {
@@ -130,7 +135,6 @@ func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey)
 			sshExtKeyServerID:      server.ID,
 			sshExtKeyServerAddress: server.Address,
 			sshExtKeyServerUser:    serverUser,
-			sshExtKeyServerName:    serverID,
 		},
 	}
 	return
@@ -186,7 +190,15 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 	}
 	defer client.Close()
 
-	PipeSSH(client, userConn, chUserNewChannel, chUserRequest)
+	log := s.Log.With(
+		"remote_addr", conn.RemoteAddr().String(),
+		"server_user", serverUser,
+		"server_address", serverAddress,
+		"server_id", userConn.Permissions.Extensions[sshExtKeyServerID],
+		"session_id", hex.EncodeToString(userConn.SessionID()),
+	)
+
+	PipeSSH(log, client, userConn, chUserNewChannel, chUserRequest)
 }
 
 func (s *SSHServer) ListenAndServe() (err error) {
@@ -228,6 +240,7 @@ func createSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 		DataDir: opts.DataDir.String(),
 		Params:  opts.Params,
 		Signers: opts.Signers,
+		Log:     opts.Log,
 	}
 
 	if opts.Lifecycle != nil {
@@ -255,7 +268,7 @@ func createSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 	return
 }
 
-func PipeSSH(target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-chan ssh.NewChannel, chUserRequest <-chan *ssh.Request) {
+func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-chan ssh.NewChannel, chUserRequest <-chan *ssh.Request) {
 	// 'user' stands for the user side
 	// 'target' stands for the target server side
 
@@ -265,7 +278,7 @@ func PipeSSH(target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-ch
 		// create target channel and target request channel
 		targetChannel, chTargetRequest, err1 := target.OpenChannel(userNewChannel.ChannelType(), userNewChannel.ExtraData())
 		if err1 != nil {
-			log.Println("open channel:", err1)
+			log.With("error", err1).Error("ssh open target channel")
 			if errOpenFailed, ok := err1.(*ssh.OpenChannelError); ok {
 				userNewChannel.Reject(errOpenFailed.Reason, errOpenFailed.Message)
 			} else {
@@ -277,7 +290,7 @@ func PipeSSH(target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-ch
 
 		userChannel, chUserRequest, err1 := userNewChannel.Accept()
 		if err1 != nil {
-			log.Println("accept channel:", err1)
+			log.With("error", err1).Error("ssh accept user channel")
 			return
 		}
 
@@ -304,7 +317,7 @@ func PipeSSH(target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-ch
 					targetRequest.Reply(ok, nil)
 				}
 				if err2 != nil {
-					log.Println("send request:", err2)
+					log.With("error", err2).Error("ssh send target request")
 				}
 			}
 		}()
@@ -318,7 +331,7 @@ func PipeSSH(target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-ch
 					userRequest.Reply(ok, nil)
 				}
 				if err2 != nil {
-					log.Println("send request:", err2)
+					log.With("error", err2).Error("ssh send user request")
 				}
 			}
 		}()
@@ -334,7 +347,7 @@ func PipeSSH(target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-ch
 			userRequest.Reply(ok, buf)
 		}
 		if err1 != nil {
-			log.Println("send request:", err1)
+			log.With("error", err1).Error("ssh send global user request")
 		}
 	}
 

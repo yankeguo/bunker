@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,12 +11,17 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/bunker/model/dao"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 )
 
-func initializeUsers(dataDir DataDir, _db *gorm.DB) (err error) {
-	buf, _ := os.ReadFile(filepath.Join(dataDir.String(), "users.yaml"))
+func initializeUsers(
+	log *zap.SugaredLogger,
+	dir DataDir,
+	_db *gorm.DB,
+) (err error) {
+	buf, _ := os.ReadFile(filepath.Join(dir.String(), "users.yaml"))
 	buf = bytes.TrimSpace(buf)
 	if len(buf) == 0 {
 		return
@@ -43,7 +47,7 @@ func initializeUsers(dataDir DataDir, _db *gorm.DB) (err error) {
 		var user *model.User
 		if user, err = db.User.Where(db.User.ID.Eq(iu.Username)).First(); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				log.Println("creating user:", iu.Username)
+				log.With("username", iu.Username).Info("user created")
 				user = &model.User{
 					ID:        iu.Username,
 					CreatedAt: time.Now(),
@@ -59,7 +63,7 @@ func initializeUsers(dataDir DataDir, _db *gorm.DB) (err error) {
 				return
 			}
 		} else if iu.UpdateExisting {
-			log.Println("updating existing user:", iu.Username)
+			log.With("username", iu.Username).Info("user updated")
 
 			user.SetPassword(iu.Password)
 
@@ -81,9 +85,9 @@ func initializeUsers(dataDir DataDir, _db *gorm.DB) (err error) {
 	return
 }
 
-func createDatabase(dataDir DataDir) (db *gorm.DB, err error) {
+func createDatabase(dir DataDir) (db *gorm.DB, err error) {
 	if db, err = gorm.Open(
-		sqlite.Open(filepath.Join(dataDir.String(), "database.sqlite3")),
+		sqlite.Open(filepath.Join(dir.String(), "database.sqlite3")),
 		&gorm.Config{},
 	); err != nil {
 		return

@@ -8,6 +8,7 @@ require (
 	github.com/yankeguo/rg v1.1.0
 	github.com/yankeguo/ufx v0.2.2
 	go.uber.org/fx v1.20.1
+	go.uber.org/zap v1.26.0
 	golang.org/x/crypto v0.18.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/gen v0.3.25
@@ -50,7 +51,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.22.0 // indirect
 	go.uber.org/dig v1.17.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.26.0 // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/net v0.20.0 // indirect
 	golang.org/x/sys v0.16.0 // indirect

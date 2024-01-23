@@ -8,11 +8,12 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/pem"
-	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/yankeguo/ufx"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -40,13 +41,14 @@ type Signers struct {
 	AuthorizedKeys string
 }
 
-func loadOrCreateSigner(filename string, generator SSHPrivateKeyGenerator) (sgn ssh.Signer, err error) {
+func loadOrCreateSigner(log *zap.SugaredLogger, filename string, generator SSHPrivateKeyGenerator) (sgn ssh.Signer, err error) {
 	var buf []byte
 	if buf, err = os.ReadFile(filename); err == nil {
 		if sgn, err = ssh.ParsePrivateKey(buf); err != nil {
 			return
 		}
-		log.Println("signer loaded from:", filename)
+
+		log.With("filename", filename).Info("signer loaded")
 	} else {
 		if !os.IsNotExist(err) {
 			return
@@ -70,17 +72,17 @@ func loadOrCreateSigner(filename string, generator SSHPrivateKeyGenerator) (sgn 
 			return
 		}
 
-		log.Println("signer generated to:", filename)
+		log.With("filename", filename).Info("signer generated")
 	}
 	return
 }
 
-func createSigners(dataDir DataDir) (signers *Signers, err error) {
+func createSigners(log *zap.SugaredLogger, dir DataDir) (signers *Signers, err error) {
 	signers = &Signers{}
 
 	for kind, generator := range sshPrivateKeyGenerators {
 		var sgn ssh.Signer
-		if sgn, err = loadOrCreateSigner(filepath.Join(dataDir.String(), "ssh_host_"+kind+"_key"), generator); err != nil {
+		if sgn, err = loadOrCreateSigner(log, filepath.Join(dir.String(), "ssh_host_"+kind+"_key"), generator); err != nil {
 			return
 		}
 		signers.Host = append(signers.Host, sgn)
@@ -88,7 +90,7 @@ func createSigners(dataDir DataDir) (signers *Signers, err error) {
 
 	for kind, generator := range sshPrivateKeyGenerators {
 		var sgn ssh.Signer
-		if sgn, err = loadOrCreateSigner(filepath.Join(dataDir.String(), "ssh_client_"+kind+"_key"), generator); err != nil {
+		if sgn, err = loadOrCreateSigner(log, filepath.Join(dir.String(), "ssh_client_"+kind+"_key"), generator); err != nil {
 			return
 		}
 		signers.Client = append(signers.Client, sgn)
@@ -98,10 +100,12 @@ func createSigners(dataDir DataDir) (signers *Signers, err error) {
 		signers.AuthorizedKeys += string(ssh.MarshalAuthorizedKey(sgn.PublicKey()))
 	}
 
+	log.Info("\n------- Client Public Keys -------\n" + strings.TrimSpace(signers.AuthorizedKeys) + "\n----------------------------------")
+
 	return
 }
 
-func installAPIAuthorizedKeys(signers *Signers, ur ufx.Router) {
+func installAPIAuthorizedKeys(ur ufx.Router, signers *Signers) {
 	ur.HandleFunc("/backend/authorized_keys", func(c ufx.Context) {
 		c.Text(signers.AuthorizedKeys)
 	})
