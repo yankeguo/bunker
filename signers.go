@@ -80,20 +80,26 @@ func loadOrCreateSigner(log *zap.SugaredLogger, filename string, generator SSHPr
 func createSigners(log *zap.SugaredLogger, dir DataDir) (signers *Signers, err error) {
 	signers = &Signers{}
 
-	for kind, generator := range sshPrivateKeyGenerators {
-		var sgn ssh.Signer
-		if sgn, err = loadOrCreateSigner(log, filepath.Join(dir.String(), "ssh_host_"+kind+"_key"), generator); err != nil {
-			return
+	for _, item := range []struct {
+		output *[]ssh.Signer
+		prefix string
+	}{
+		{
+			output: &signers.Host,
+			prefix: "ssh_host_",
+		},
+		{
+			output: &signers.Client,
+			prefix: "ssh_client_",
+		},
+	} {
+		for kind, generator := range sshPrivateKeyGenerators {
+			var sgn ssh.Signer
+			if sgn, err = loadOrCreateSigner(log, filepath.Join(dir.String(), item.prefix+kind+"_key"), generator); err != nil {
+				return
+			}
+			*item.output = append(*item.output, sgn)
 		}
-		signers.Host = append(signers.Host, sgn)
-	}
-
-	for kind, generator := range sshPrivateKeyGenerators {
-		var sgn ssh.Signer
-		if sgn, err = loadOrCreateSigner(log, filepath.Join(dir.String(), "ssh_client_"+kind+"_key"), generator); err != nil {
-			return
-		}
-		signers.Client = append(signers.Client, sgn)
 	}
 
 	for _, sgn := range signers.Client {
