@@ -17,7 +17,12 @@ import (
 )
 
 const (
-	sshExtKeyUserID = "bunker.user_id"
+	sshExtKeyError         = "bunker.error"
+	sshExtKeyUserID        = "bunker.user_id"
+	sshExtKeyServerID      = "bunker.server_id"
+	sshExtKeyServerUser    = "bunker.server_user"
+	sshExtKeyServerName    = "bunker.server_name"
+	sshExtKeyServerAddress = "bunker.server_address"
 )
 
 type SSHServerParams struct {
@@ -56,27 +61,51 @@ func (s *SSHServer) createServerConfig() *ssh.ServerConfig {
 		PublicKeyCallback: func(conn ssh.ConnMetadata, _key ssh.PublicKey) (perm *ssh.Permissions, err error) {
 			db := dao.Use(s.Database)
 
+			// find user key and user
 			var key *model.Key
 			if key, err = db.Key.Where(dao.Key.ID.Eq(
 				strings.ToLower(ssh.FingerprintSHA256(_key)),
-			)).First(); err != nil {
+			)).Preload(dao.Key.User).First(); err != nil {
 				return nil, err
 			}
 
-			var user *model.User
-			if user, err = db.User.Where(dao.User.ID.Eq(key.UserID)).First(); err != nil {
-				return nil, err
+			if key.User.ID == "" {
+				err = errors.New("key is not associated with any user")
+				return
 			}
+
+			// find server
+			splits := strings.Split(conn.User(), "@")
+			if len(splits) != 2 {
+				err = errors.New("invalid user format, should be user@server")
+				return
+			}
+
+			var (
+				serverUser = splits[0]
+				serverName = splits[1]
+			)
+
+			var server *model.Server
+			if server, err = db.Server.Where(dao.Server.ID.Eq(serverUser + "@" + serverName)).First(); err != nil {
+				return
+			}
+
+			//TODO: VALIDATE GRANT
 
 			perm = &ssh.Permissions{
 				Extensions: map[string]string{
-					sshExtKeyUserID: user.ID,
+					sshExtKeyUserID:        key.User.ID,
+					sshExtKeyServerID:      server.ID,
+					sshExtKeyServerAddress: server.Address,
+					sshExtKeyServerUser:    serverUser,
+					sshExtKeyServerName:    serverName,
 				},
 			}
 			return
 		},
 		BannerCallback: func(conn ssh.ConnMetadata) string {
-			return "bunker from github.com/yankeguo/bunker"
+			return "[bunker] "
 		},
 	}
 

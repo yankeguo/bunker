@@ -17,6 +17,8 @@ type User struct {
 	VisitedAt      time.Time `gorm:"column:visited_at;not null;index" json:"visited_at"`
 	IsAdmin        bool      `gorm:"column:is_admin;not null;default:0;index" json:"is_admin"`
 	IsBlocked      bool      `gorm:"column:is_blocked;not null;default:0;index" json:"is_blocked"`
+
+	Keys []Key
 }
 
 // SetPassword update password for user

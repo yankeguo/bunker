@@ -31,6 +31,24 @@ func newKey(db *gorm.DB, opts ...gen.DOOption) key {
 	_key.DisplayName = field.NewString(tableName, "display_name")
 	_key.UserID = field.NewString(tableName, "user_id")
 	_key.CreatedAt = field.NewTime(tableName, "created_at")
+	_key.User = keyBelongsToUser{
+		db: db.Session(&gorm.Session{}),
+
+		RelationField: field.NewRelation("User", "model.User"),
+		Keys: struct {
+			field.RelationField
+			User struct {
+				field.RelationField
+			}
+		}{
+			RelationField: field.NewRelation("User.Keys", "model.Key"),
+			User: struct {
+				field.RelationField
+			}{
+				RelationField: field.NewRelation("User.Keys.User", "model.User"),
+			},
+		},
+	}
 
 	_key.fillFieldMap()
 
@@ -45,6 +63,7 @@ type key struct {
 	DisplayName field.String
 	UserID      field.String
 	CreatedAt   field.Time
+	User        keyBelongsToUser
 
 	fieldMap map[string]field.Expr
 }
@@ -81,11 +100,12 @@ func (k *key) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (k *key) fillFieldMap() {
-	k.fieldMap = make(map[string]field.Expr, 4)
+	k.fieldMap = make(map[string]field.Expr, 5)
 	k.fieldMap["id"] = k.ID
 	k.fieldMap["display_name"] = k.DisplayName
 	k.fieldMap["user_id"] = k.UserID
 	k.fieldMap["created_at"] = k.CreatedAt
+
 }
 
 func (k key) clone(db *gorm.DB) key {
@@ -96,6 +116,84 @@ func (k key) clone(db *gorm.DB) key {
 func (k key) replaceDB(db *gorm.DB) key {
 	k.keyDo.ReplaceDB(db)
 	return k
+}
+
+type keyBelongsToUser struct {
+	db *gorm.DB
+
+	field.RelationField
+
+	Keys struct {
+		field.RelationField
+		User struct {
+			field.RelationField
+		}
+	}
+}
+
+func (a keyBelongsToUser) Where(conds ...field.Expr) *keyBelongsToUser {
+	if len(conds) == 0 {
+		return &a
+	}
+
+	exprs := make([]clause.Expression, 0, len(conds))
+	for _, cond := range conds {
+		exprs = append(exprs, cond.BeCond().(clause.Expression))
+	}
+	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
+	return &a
+}
+
+func (a keyBelongsToUser) WithContext(ctx context.Context) *keyBelongsToUser {
+	a.db = a.db.WithContext(ctx)
+	return &a
+}
+
+func (a keyBelongsToUser) Session(session *gorm.Session) *keyBelongsToUser {
+	a.db = a.db.Session(session)
+	return &a
+}
+
+func (a keyBelongsToUser) Model(m *model.Key) *keyBelongsToUserTx {
+	return &keyBelongsToUserTx{a.db.Model(m).Association(a.Name())}
+}
+
+type keyBelongsToUserTx struct{ tx *gorm.Association }
+
+func (a keyBelongsToUserTx) Find() (result *model.User, err error) {
+	return result, a.tx.Find(&result)
+}
+
+func (a keyBelongsToUserTx) Append(values ...*model.User) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Append(targetValues...)
+}
+
+func (a keyBelongsToUserTx) Replace(values ...*model.User) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Replace(targetValues...)
+}
+
+func (a keyBelongsToUserTx) Delete(values ...*model.User) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Delete(targetValues...)
+}
+
+func (a keyBelongsToUserTx) Clear() error {
+	return a.tx.Clear()
+}
+
+func (a keyBelongsToUserTx) Count() int64 {
+	return a.tx.Count()
 }
 
 type keyDo struct{ gen.DO }

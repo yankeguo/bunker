@@ -16,39 +16,44 @@ import (
 )
 
 var (
-	Q    = new(Query)
-	Key  *key
-	User *user
+	Q      = new(Query)
+	Key    *key
+	Server *server
+	User   *user
 )
 
 func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	*Q = *Use(db, opts...)
 	Key = &Q.Key
+	Server = &Q.Server
 	User = &Q.User
 }
 
 func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 	return &Query{
-		db:   db,
-		Key:  newKey(db, opts...),
-		User: newUser(db, opts...),
+		db:     db,
+		Key:    newKey(db, opts...),
+		Server: newServer(db, opts...),
+		User:   newUser(db, opts...),
 	}
 }
 
 type Query struct {
 	db *gorm.DB
 
-	Key  key
-	User user
+	Key    key
+	Server server
+	User   user
 }
 
 func (q *Query) Available() bool { return q.db != nil }
 
 func (q *Query) clone(db *gorm.DB) *Query {
 	return &Query{
-		db:   db,
-		Key:  q.Key.clone(db),
-		User: q.User.clone(db),
+		db:     db,
+		Key:    q.Key.clone(db),
+		Server: q.Server.clone(db),
+		User:   q.User.clone(db),
 	}
 }
 
@@ -62,21 +67,24 @@ func (q *Query) WriteDB() *Query {
 
 func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 	return &Query{
-		db:   db,
-		Key:  q.Key.replaceDB(db),
-		User: q.User.replaceDB(db),
+		db:     db,
+		Key:    q.Key.replaceDB(db),
+		Server: q.Server.replaceDB(db),
+		User:   q.User.replaceDB(db),
 	}
 }
 
 type queryCtx struct {
-	Key  *keyDo
-	User *userDo
+	Key    *keyDo
+	Server *serverDo
+	User   *userDo
 }
 
 func (q *Query) WithContext(ctx context.Context) *queryCtx {
 	return &queryCtx{
-		Key:  q.Key.WithContext(ctx),
-		User: q.User.WithContext(ctx),
+		Key:    q.Key.WithContext(ctx),
+		Server: q.Server.WithContext(ctx),
+		User:   q.User.WithContext(ctx),
 	}
 }
 
