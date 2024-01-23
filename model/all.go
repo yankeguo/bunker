@@ -4,4 +4,5 @@ var All = []any{
 	User{},
 	Key{},
 	Server{},
+	Grant{},
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/git-lfs/wildmatch"
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/bunker/model/dao"
 	"github.com/yankeguo/ufx"
@@ -53,60 +54,95 @@ type SSHServerOptions struct {
 	Signers  *Signers
 }
 
+func (s *SSHServer) AuthLogCallback(conn ssh.ConnMetadata, method string, err error) {
+	log.Println("auth:", conn.RemoteAddr(), conn.User(), method, err)
+}
+
+func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey) (perm *ssh.Permissions, err error) {
+	db := dao.Use(s.Database)
+
+	// find key and user
+	var key *model.Key
+	if key, err = db.Key.Where(dao.Key.ID.Eq(
+		strings.ToLower(ssh.FingerprintSHA256(_key)),
+	)).Preload(dao.Key.User).First(); err != nil {
+		return nil, err
+	}
+
+	if key.User.ID == "" {
+		err = errors.New("key is not associated with any user")
+		return
+	}
+
+	if key.User.IsBlocked {
+		err = errors.New("user is blocked")
+		return
+	}
+
+	// find server
+	splits := strings.Split(conn.User(), "@")
+	if len(splits) != 2 {
+		err = errors.New("invalid user format, should be server_user@server_id")
+		return
+	}
+
+	var (
+		serverUser = splits[0]
+		serverID   = splits[1]
+	)
+
+	var server *model.Server
+	if server, err = db.Server.Where(dao.Server.ID.Eq(serverID)).First(); err != nil {
+		return
+	}
+
+	// find grants
+	var grants = []*model.Grant{}
+	if grants, err = db.Grant.Where(dao.Grant.UserID.Eq(key.User.ID)).Find(); err != nil {
+		return
+	}
+
+	var granted bool
+
+	// check if user is granted
+	for _, grant := range grants {
+		var (
+			mServerUser = wildmatch.NewWildmatch(grant.ServerUser, wildmatch.Basename, wildmatch.CaseFold)
+			mServerID   = wildmatch.NewWildmatch(grant.ServerID, wildmatch.Basename, wildmatch.CaseFold)
+		)
+
+		if mServerUser.Match(serverUser) && mServerID.Match(serverID) {
+			granted = true
+			break
+		}
+	}
+
+	if !granted {
+		err = errors.New("no grant found")
+		return
+	}
+
+	perm = &ssh.Permissions{
+		Extensions: map[string]string{
+			sshExtKeyUserID:        key.User.ID,
+			sshExtKeyServerID:      server.ID,
+			sshExtKeyServerAddress: server.Address,
+			sshExtKeyServerUser:    serverUser,
+			sshExtKeyServerName:    serverID,
+		},
+	}
+	return
+}
+
+func (s *SSHServer) BannerCallback(conn ssh.ConnMetadata) string {
+	return "[bunker] "
+}
+
 func (s *SSHServer) createServerConfig() *ssh.ServerConfig {
 	cfg := &ssh.ServerConfig{
-		AuthLogCallback: func(conn ssh.ConnMetadata, method string, err error) {
-			log.Println("auth:", conn.RemoteAddr(), conn.User(), method, err)
-		},
-		PublicKeyCallback: func(conn ssh.ConnMetadata, _key ssh.PublicKey) (perm *ssh.Permissions, err error) {
-			db := dao.Use(s.Database)
-
-			// find user key and user
-			var key *model.Key
-			if key, err = db.Key.Where(dao.Key.ID.Eq(
-				strings.ToLower(ssh.FingerprintSHA256(_key)),
-			)).Preload(dao.Key.User).First(); err != nil {
-				return nil, err
-			}
-
-			if key.User.ID == "" {
-				err = errors.New("key is not associated with any user")
-				return
-			}
-
-			// find server
-			splits := strings.Split(conn.User(), "@")
-			if len(splits) != 2 {
-				err = errors.New("invalid user format, should be user@server")
-				return
-			}
-
-			var (
-				serverUser = splits[0]
-				serverName = splits[1]
-			)
-
-			var server *model.Server
-			if server, err = db.Server.Where(dao.Server.ID.Eq(serverUser + "@" + serverName)).First(); err != nil {
-				return
-			}
-
-			//TODO: VALIDATE GRANT
-
-			perm = &ssh.Permissions{
-				Extensions: map[string]string{
-					sshExtKeyUserID:        key.User.ID,
-					sshExtKeyServerID:      server.ID,
-					sshExtKeyServerAddress: server.Address,
-					sshExtKeyServerUser:    serverUser,
-					sshExtKeyServerName:    serverName,
-				},
-			}
-			return
-		},
-		BannerCallback: func(conn ssh.ConnMetadata) string {
-			return "[bunker] "
-		},
+		AuthLogCallback:   s.AuthLogCallback,
+		PublicKeyCallback: s.PublicKeyCallback,
+		BannerCallback:    s.BannerCallback,
 	}
 
 	for _, sgn := range s.Signers.Host {

@@ -48,6 +48,19 @@ func newKey(db *gorm.DB, opts ...gen.DOOption) key {
 				RelationField: field.NewRelation("User.Keys.User", "model.User"),
 			},
 		},
+		Grants: struct {
+			field.RelationField
+			User struct {
+				field.RelationField
+			}
+		}{
+			RelationField: field.NewRelation("User.Grants", "model.Grant"),
+			User: struct {
+				field.RelationField
+			}{
+				RelationField: field.NewRelation("User.Grants.User", "model.User"),
+			},
+		},
 	}
 
 	_key.fillFieldMap()
@@ -124,6 +137,12 @@ type keyBelongsToUser struct {
 	field.RelationField
 
 	Keys struct {
+		field.RelationField
+		User struct {
+			field.RelationField
+		}
+	}
+	Grants struct {
 		field.RelationField
 		User struct {
 			field.RelationField

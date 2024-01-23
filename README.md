@@ -11,7 +11,7 @@ Visit [GitHub Releases](https://github.com/yankeguo/bunker/releases) and downloa
 Static assets are embedded in the binary, so you don't need to download anything else.
 
 - Prepare a `data` directory and put `bunker.yaml` configuration file in it
-- Run `bunker -data-dir data`
+- Run `bunker --data-dir data`
 
 ### From Container Image
 
@@ -19,6 +19,14 @@ Visit [DockerHub Repository](https://hub.docker.com/repository/docker/yankeguo/b
 
 - Prepare a `data` directory and put `bunker.yaml` configuration file in it
 - Run contaienr image with `/data` mounted, `docker run -p 8080:8080 -p 8022:8022 -v $PWD/data:/data yankeguo/bunker:latest`
+
+## Initialization
+
+Put a `admin.yaml` file in `data-dir` to initialize the system with an admin user.
+
+```yaml
+myusername: mypassword
+```
 
 ## Configuration File
 

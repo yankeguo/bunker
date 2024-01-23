@@ -42,6 +42,12 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 			Keys struct {
 				field.RelationField
 			}
+			Grants struct {
+				field.RelationField
+				User struct {
+					field.RelationField
+				}
+			}
 		}{
 			RelationField: field.NewRelation("Keys.User", "model.User"),
 			Keys: struct {
@@ -49,7 +55,26 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 			}{
 				RelationField: field.NewRelation("Keys.User.Keys", "model.Key"),
 			},
+			Grants: struct {
+				field.RelationField
+				User struct {
+					field.RelationField
+				}
+			}{
+				RelationField: field.NewRelation("Keys.User.Grants", "model.Grant"),
+				User: struct {
+					field.RelationField
+				}{
+					RelationField: field.NewRelation("Keys.User.Grants.User", "model.User"),
+				},
+			},
 		},
+	}
+
+	_user.Grants = userHasManyGrants{
+		db: db.Session(&gorm.Session{}),
+
+		RelationField: field.NewRelation("Grants", "model.Grant"),
 	}
 
 	_user.fillFieldMap()
@@ -68,6 +93,8 @@ type user struct {
 	IsAdmin        field.Bool
 	IsBlocked      field.Bool
 	Keys           userHasManyKeys
+
+	Grants userHasManyGrants
 
 	fieldMap map[string]field.Expr
 }
@@ -106,7 +133,7 @@ func (u *user) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (u *user) fillFieldMap() {
-	u.fieldMap = make(map[string]field.Expr, 7)
+	u.fieldMap = make(map[string]field.Expr, 8)
 	u.fieldMap["id"] = u.ID
 	u.fieldMap["password_digest"] = u.PasswordDigest
 	u.fieldMap["created_at"] = u.CreatedAt
@@ -135,6 +162,12 @@ type userHasManyKeys struct {
 		field.RelationField
 		Keys struct {
 			field.RelationField
+		}
+		Grants struct {
+			field.RelationField
+			User struct {
+				field.RelationField
+			}
 		}
 	}
 }
@@ -201,6 +234,77 @@ func (a userHasManyKeysTx) Clear() error {
 }
 
 func (a userHasManyKeysTx) Count() int64 {
+	return a.tx.Count()
+}
+
+type userHasManyGrants struct {
+	db *gorm.DB
+
+	field.RelationField
+}
+
+func (a userHasManyGrants) Where(conds ...field.Expr) *userHasManyGrants {
+	if len(conds) == 0 {
+		return &a
+	}
+
+	exprs := make([]clause.Expression, 0, len(conds))
+	for _, cond := range conds {
+		exprs = append(exprs, cond.BeCond().(clause.Expression))
+	}
+	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
+	return &a
+}
+
+func (a userHasManyGrants) WithContext(ctx context.Context) *userHasManyGrants {
+	a.db = a.db.WithContext(ctx)
+	return &a
+}
+
+func (a userHasManyGrants) Session(session *gorm.Session) *userHasManyGrants {
+	a.db = a.db.Session(session)
+	return &a
+}
+
+func (a userHasManyGrants) Model(m *model.User) *userHasManyGrantsTx {
+	return &userHasManyGrantsTx{a.db.Model(m).Association(a.Name())}
+}
+
+type userHasManyGrantsTx struct{ tx *gorm.Association }
+
+func (a userHasManyGrantsTx) Find() (result []*model.Grant, err error) {
+	return result, a.tx.Find(&result)
+}
+
+func (a userHasManyGrantsTx) Append(values ...*model.Grant) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Append(targetValues...)
+}
+
+func (a userHasManyGrantsTx) Replace(values ...*model.Grant) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Replace(targetValues...)
+}
+
+func (a userHasManyGrantsTx) Delete(values ...*model.Grant) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Delete(targetValues...)
+}
+
+func (a userHasManyGrantsTx) Clear() error {
+	return a.tx.Clear()
+}
+
+func (a userHasManyGrantsTx) Count() int64 {
 	return a.tx.Count()
 }
 
