@@ -1,3 +1,10 @@
+export interface BKey {
+  id: string;
+  display_name: string;
+  created_at: string;
+  visited_at: string;
+}
+
 export interface BUser {
   id: string;
   created_at: string;

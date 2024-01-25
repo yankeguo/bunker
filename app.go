@@ -13,6 +13,7 @@ import (
 	"github.com/yankeguo/rg"
 	"github.com/yankeguo/ufx"
 	"go.uber.org/fx"
+	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 )
 
@@ -163,8 +164,72 @@ func (a *App) routeSignOut(c ufx.Context) {
 	c.JSON(map[string]any{})
 }
 
+func (a *App) routeListKeys(c ufx.Context) {
+	_, user := a.requireUser(c)
+
+	db := dao.Use(a.db)
+
+	keys := rg.Must(db.Key.Where(db.Key.UserID.Eq(user.ID)).Find())
+
+	c.JSON(map[string]any{"keys": keys})
+}
+
+func (a *App) routeCreateKey(c ufx.Context) {
+	_, user := a.requireUser(c)
+
+	var data struct {
+		DisplayName string `json:"display_name"`
+		PublicKey   string `json:"public_key"`
+	}
+	c.Bind(&data)
+
+	if data.DisplayName == "" {
+		data.DisplayName = "Unnamed"
+	}
+
+	if data.PublicKey == "" {
+		halt.String("public key is required", halt.WithBadRequest())
+		return
+	}
+
+	k, _, _, _ := rg.Must4(ssh.ParseAuthorizedKey([]byte(data.PublicKey)))
+
+	id := ssh.FingerprintSHA256(k)
+
+	db := dao.Use(a.db)
+
+	key := &model.Key{
+		ID:          id,
+		DisplayName: data.DisplayName,
+		UserID:      user.ID,
+		CreatedAt:   time.Now(),
+	}
+
+	rg.Must0(db.Key.Create(key))
+
+	c.JSON(map[string]any{"key": key})
+}
+
+func (a *App) routeDeleteKey(c ufx.Context) {
+	_, user := a.requireUser(c)
+
+	var data struct {
+		ID string `json:"id"`
+	}
+	c.Bind(&data)
+
+	db := dao.Use(a.db)
+
+	rg.Must(db.Key.Where(db.Key.ID.Eq(data.ID), db.Key.UserID.Eq(user.ID)).Delete())
+
+	c.JSON(map[string]any{})
+}
+
 func InstallAppToRouter(a *App, ur ufx.Router) {
 	ur.HandleFunc("/backend/current_user", a.routeCurrentUser)
 	ur.HandleFunc("/backend/sign_in", a.routeSignIn)
 	ur.HandleFunc("/backend/sign_out", a.routeSignOut)
+	ur.HandleFunc("/backend/keys", a.routeListKeys)
+	ur.HandleFunc("/backend/keys/create", a.routeCreateKey)
+	ur.HandleFunc("/backend/keys/delete", a.routeDeleteKey)
 }

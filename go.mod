@@ -5,6 +5,7 @@ go 1.21.6
 require (
 	github.com/git-lfs/wildmatch v1.0.4
 	github.com/glebarez/sqlite v1.10.0
+	github.com/yankeguo/halt v0.1.0
 	github.com/yankeguo/rg v1.1.0
 	github.com/yankeguo/ufx v0.2.2
 	go.uber.org/fx v1.20.1
@@ -41,7 +42,6 @@ require (
 	github.com/prometheus/common v0.46.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/yankeguo/halt v0.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.47.0 // indirect
 	go.opentelemetry.io/contrib/propagators/b3 v1.22.0 // indirect
 	go.opentelemetry.io/otel v1.22.0 // indirect

@@ -26,7 +26,12 @@ const links = [
   ],
   [
     {
-      label: "Profile",
+      label: "My SSH Keys",
+      icon: "i-mdi-key-chain",
+      to: { name: "dashboard-profile-keys" },
+    },
+    {
+      label: "My Profile",
       icon: "i-mdi-account-circle",
       to: { name: "dashboard-profile" },
     },
