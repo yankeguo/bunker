@@ -3,7 +3,7 @@ ENV CGO_ENABLED 0
 ARG VERSION
 WORKDIR /go/src/app
 ADD . .
-RUN go build -o /bunker
+RUN go build -o /bunker ./cmd/bunker
 
 FROM debian:12
 

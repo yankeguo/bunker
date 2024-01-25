@@ -1,4 +1,4 @@
-package main
+package bunker
 
 import (
 	"embed"
@@ -13,7 +13,7 @@ import (
 //go:embed ui/.output/public ui/.output/public/**/*
 var STATIC embed.FS
 
-func installStatic(ur ufx.Router) {
+func InstallStaticToRouter(ur ufx.Router) {
 	f := rg.Must(fs.Sub(STATIC, path.Join("ui", ".output", "public")))
 	ur.ServeMux().Handle("/", http.FileServer(http.FS(f)))
 }

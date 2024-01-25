@@ -6,17 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/yankeguo/bunker"
 	"github.com/yankeguo/ufx"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
 )
-
-type DataDir string
-
-func (d DataDir) String() string {
-	return string(d)
-}
 
 func main() {
 	var optDataDir string
@@ -36,19 +31,34 @@ func main() {
 	defer logger.Sync()
 
 	app := fx.New(
-		fx.Supply(logger),
-		fx.Supply(logger.Sugar()),
+		fx.Supply(
+			bunker.DataDir(optDataDir),
+			logger,
+			logger.Sugar(),
+		),
+
 		fx.WithLogger(func(log *zap.Logger) fxevent.Logger {
 			return &fxevent.ZapLogger{Logger: log}
 		}),
-		fx.Supply(DataDir(optDataDir)),
-		fx.Provide(createDatabase),
-		fx.Provide(createSSHServerParams, createSSHServer, createSigners),
+
 		ufx.ProvideConfFromYAMLFile(filepath.Join(optDataDir, "bunker.yaml")),
 		ufx.Module,
-		fx.Invoke(installStatic, installAPIAuthorizedKeys),
-		fx.Invoke(func(s *SSHServer) {}),
-		fx.Invoke(initializeUsers),
+
+		fx.Provide(
+			bunker.CreateDatabase,
+			bunker.CreateSSHServer,
+			bunker.CreateSigners,
+			bunker.CreateApp,
+		),
+
+		fx.Invoke(
+			bunker.InitializeUsers,
+			bunker.InstallStaticToRouter,
+			bunker.InstallSignersToRouter,
+			bunker.InstallAppToRouter,
+		),
+
+		fx.Invoke(func(s *bunker.SSHServer) {}),
 	)
 	if app.Err() != nil {
 		log.Println(app.Err().Error())

@@ -1,4 +1,4 @@
-package main
+package bunker
 
 import (
 	"crypto"
@@ -77,7 +77,7 @@ func loadOrCreateSigner(log *zap.SugaredLogger, filename string, generator SSHPr
 	return
 }
 
-func createSigners(log *zap.SugaredLogger, dir DataDir) (signers *Signers, err error) {
+func CreateSigners(log *zap.SugaredLogger, dir DataDir) (signers *Signers, err error) {
 	signers = &Signers{}
 
 	for _, item := range []struct {
@@ -111,7 +111,7 @@ func createSigners(log *zap.SugaredLogger, dir DataDir) (signers *Signers, err e
 	return
 }
 
-func installAPIAuthorizedKeys(ur ufx.Router, signers *Signers) {
+func InstallSignersToRouter(ur ufx.Router, signers *Signers) {
 	ur.HandleFunc("/backend/authorized_keys", func(c ufx.Context) {
 		c.Text(signers.AuthorizedKeys)
 	})

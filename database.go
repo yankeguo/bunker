@@ -1,4 +1,4 @@
-package main
+package bunker
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func initializeUsers(
+func InitializeUsers(
 	log *zap.SugaredLogger,
 	dir DataDir,
 	_db *gorm.DB,
@@ -85,7 +85,7 @@ func initializeUsers(
 	return
 }
 
-func createDatabase(dir DataDir) (db *gorm.DB, err error) {
+func CreateDatabase(dir DataDir) (db *gorm.DB, err error) {
 	if db, err = gorm.Open(
 		sqlite.Open(filepath.Join(dir.String(), "database.sqlite3")),
 		&gorm.Config{},

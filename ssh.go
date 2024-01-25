@@ -1,4 +1,4 @@
-package main
+package bunker
 
 import (
 	"context"
@@ -27,38 +27,71 @@ const (
 	sshExtKeyServerAddress = "bunker.server_address"
 )
 
-type SSHServerParams struct {
-	Listen string `json:"listen" default:":8022" validate:"required"`
-}
-
-func createSSHServerParams(c ufx.Conf) (p SSHServerParams, err error) {
-	err = c.Bind(&p, "ssh_server")
-	return
-}
-
 type SSHServer struct {
-	DataDir  string
-	Params   SSHServerParams
-	Database *gorm.DB
-	Signers  *Signers
-	Log      *zap.SugaredLogger
-
+	dataDir  string
+	listen   string
+	db       *gorm.DB
+	signers  *Signers
+	loggers  *zap.SugaredLogger
 	listener *net.TCPListener
+}
+
+type sshServerParams struct {
+	Listen string `json:"listen" default:":8022" validate:"required"`
 }
 
 type SSHServerOptions struct {
 	fx.In
-	fx.Lifecycle
 
-	Params   SSHServerParams
-	DataDir  DataDir
-	Database *gorm.DB
-	Signers  *Signers
-	Log      *zap.SugaredLogger
+	Lifecycle fx.Lifecycle
+	Conf      ufx.Conf
+	DataDir   DataDir
+	DB        *gorm.DB
+	Signers   *Signers
+	Logger    *zap.SugaredLogger
+}
+
+func CreateSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
+	var p sshServerParams
+
+	if err = opts.Conf.Bind(&p, "ssh_server"); err != nil {
+		return
+	}
+
+	s = &SSHServer{
+		dataDir: opts.DataDir.String(),
+		listen:  p.Listen,
+		signers: opts.Signers,
+		loggers: opts.Logger,
+	}
+
+	if opts.Lifecycle != nil {
+		opts.Lifecycle.Append(fx.Hook{
+			OnStart: func(ctx context.Context) error {
+				chErr := make(chan error, 1)
+				go func() {
+					chErr <- s.ListenAndServe()
+				}()
+				select {
+				case err := <-chErr:
+					return err
+				case <-ctx.Done():
+					return s.Shutdown(ctx)
+				case <-time.After(time.Second * 3):
+					return nil
+				}
+			},
+			OnStop: func(ctx context.Context) error {
+				time.Sleep(time.Second * 3)
+				return s.Shutdown(ctx)
+			},
+		})
+	}
+	return
 }
 
 func (s *SSHServer) AuthLogCallback(conn ssh.ConnMetadata, method string, err error) {
-	s.Log.With(
+	s.loggers.With(
 		"remote_addr", conn.RemoteAddr().String(),
 		"method", method,
 		"error", err,
@@ -66,7 +99,7 @@ func (s *SSHServer) AuthLogCallback(conn ssh.ConnMetadata, method string, err er
 }
 
 func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey) (perm *ssh.Permissions, err error) {
-	db := dao.Use(s.Database)
+	db := dao.Use(s.db)
 
 	// find key and user
 	var key *model.Key
@@ -151,7 +184,7 @@ func (s *SSHServer) createServerConfig() *ssh.ServerConfig {
 		BannerCallback:    s.BannerCallback,
 	}
 
-	for _, sgn := range s.Signers.Host {
+	for _, sgn := range s.signers.Host {
 		cfg.AddHostKey(sgn)
 	}
 
@@ -183,14 +216,14 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 	if client, err = ssh.Dial("tcp", serverAddress, &ssh.ClientConfig{
 		User: serverUser,
 		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(s.Signers.Client...),
+			ssh.PublicKeys(s.signers.Client...),
 		},
 	}); err != nil {
 		return
 	}
 	defer client.Close()
 
-	log := s.Log.With(
+	log := s.loggers.With(
 		"remote_addr", conn.RemoteAddr().String(),
 		"server_user", serverUser,
 		"server_address", serverAddress,
@@ -208,7 +241,7 @@ func (s *SSHServer) ListenAndServe() (err error) {
 	}
 
 	var addr *net.TCPAddr
-	if addr, err = net.ResolveTCPAddr("tcp", s.Params.Listen); err != nil {
+	if addr, err = net.ResolveTCPAddr("tcp", s.listen); err != nil {
 		return
 	}
 
@@ -232,39 +265,6 @@ func (s *SSHServer) Shutdown(ctx context.Context) (err error) {
 		return
 	}
 	err = l.Close()
-	return
-}
-
-func createSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
-	s = &SSHServer{
-		DataDir: opts.DataDir.String(),
-		Params:  opts.Params,
-		Signers: opts.Signers,
-		Log:     opts.Log,
-	}
-
-	if opts.Lifecycle != nil {
-		opts.Lifecycle.Append(fx.Hook{
-			OnStart: func(ctx context.Context) error {
-				chErr := make(chan error, 1)
-				go func() {
-					chErr <- s.ListenAndServe()
-				}()
-				select {
-				case err := <-chErr:
-					return err
-				case <-ctx.Done():
-					return s.Shutdown(ctx)
-				case <-time.After(time.Second * 3):
-					return nil
-				}
-			},
-			OnStop: func(ctx context.Context) error {
-				time.Sleep(time.Second * 3)
-				return s.Shutdown(ctx)
-			},
-		})
-	}
 	return
 }
 
