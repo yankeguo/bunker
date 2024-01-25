@@ -14,7 +14,7 @@
     "@vueuse/core": "^10.7.2",
     "@vueuse/nuxt": "^10.7.2",
     "nuxt": "^3.9.3",
-    "vue": "^3.4.14",
+    "vue": "^3.4.15",
     "vue-router": "^4.2.5"
   },
   "dependencies": {
