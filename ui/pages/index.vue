@@ -14,8 +14,27 @@ const validate = (state: any): FormError[] => {
 };
 
 async function onSubmit(event: FormSubmitEvent<any>) {
-  // Do something with data
-  console.log(event.data);
+  try {
+    const { user, token }: any = await $fetch("/backend/sign_in", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(event.data),
+    });
+    navigateTo({ name: "dashboard" });
+  } catch (e: any) {
+    handleError(e);
+  } finally {
+    refreshCurrentUser();
+  }
+}
+
+const { data: currentUser, refresh: refreshCurrentUser } =
+  await useCurrentUser();
+
+if (currentUser.value.user && currentUser.value.token) {
+  navigateTo({ name: "dashboard" });
 }
 </script>
 
@@ -23,19 +42,16 @@ async function onSubmit(event: FormSubmitEvent<any>) {
   <div
     class="absolute top-0 left-0 w-full h-full flex flex-col justify-center items-center"
   >
-    <div class="mb-12">
-      <div class="font-semibold font-mono text-4xl mb-4">Bunker System</div>
-      <div class="flex flex-row items-center">
-        <span class="me-2">by</span>
-        <UButton
-          size="sm"
-          icon="i-simple-icons-github"
-          variant="link"
-          to="https://github.com/yankeguo/bunker"
-          target="_blank"
-          label="yankeguo"
-        ></UButton>
-      </div>
+    <div class="mb-12 text-center">
+      <div class="font-semibold font-mono text-4xl mb-6">Bunker System</div>
+      <UButton
+        size="sm"
+        icon="i-simple-icons-github"
+        variant="link"
+        to="https://github.com/yankeguo/bunker"
+        target="_blank"
+        label="yankeguo/bunker"
+      ></UButton>
     </div>
 
     <UCard class="w-80">
@@ -53,7 +69,7 @@ async function onSubmit(event: FormSubmitEvent<any>) {
           <UInput v-model="state.password" type="password" />
         </UFormGroup>
 
-        <UButton type="submit">Sign In</UButton>
+        <UButton type="submit" icon="i-mdi-login">Sign In</UButton>
       </UForm>
     </UCard>
 

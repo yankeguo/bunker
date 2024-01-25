@@ -20,6 +20,7 @@ var (
 	Grant  *grant
 	Key    *key
 	Server *server
+	Token  *token
 	User   *user
 )
 
@@ -28,6 +29,7 @@ func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	Grant = &Q.Grant
 	Key = &Q.Key
 	Server = &Q.Server
+	Token = &Q.Token
 	User = &Q.User
 }
 
@@ -37,6 +39,7 @@ func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 		Grant:  newGrant(db, opts...),
 		Key:    newKey(db, opts...),
 		Server: newServer(db, opts...),
+		Token:  newToken(db, opts...),
 		User:   newUser(db, opts...),
 	}
 }
@@ -47,6 +50,7 @@ type Query struct {
 	Grant  grant
 	Key    key
 	Server server
+	Token  token
 	User   user
 }
 
@@ -58,6 +62,7 @@ func (q *Query) clone(db *gorm.DB) *Query {
 		Grant:  q.Grant.clone(db),
 		Key:    q.Key.clone(db),
 		Server: q.Server.clone(db),
+		Token:  q.Token.clone(db),
 		User:   q.User.clone(db),
 	}
 }
@@ -76,6 +81,7 @@ func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 		Grant:  q.Grant.replaceDB(db),
 		Key:    q.Key.replaceDB(db),
 		Server: q.Server.replaceDB(db),
+		Token:  q.Token.replaceDB(db),
 		User:   q.User.replaceDB(db),
 	}
 }
@@ -84,6 +90,7 @@ type queryCtx struct {
 	Grant  *grantDo
 	Key    *keyDo
 	Server *serverDo
+	Token  *tokenDo
 	User   *userDo
 }
 
@@ -92,6 +99,7 @@ func (q *Query) WithContext(ctx context.Context) *queryCtx {
 		Grant:  q.Grant.WithContext(ctx),
 		Key:    q.Key.WithContext(ctx),
 		Server: q.Server.WithContext(ctx),
+		Token:  q.Token.WithContext(ctx),
 		User:   q.User.WithContext(ctx),
 	}
 }

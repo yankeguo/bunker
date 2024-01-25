@@ -62,6 +62,19 @@ func newGrant(db *gorm.DB, opts ...gen.DOOption) grant {
 				RelationField: field.NewRelation("User.Grants.User", "model.User"),
 			},
 		},
+		Tokens: struct {
+			field.RelationField
+			User struct {
+				field.RelationField
+			}
+		}{
+			RelationField: field.NewRelation("User.Tokens", "model.Token"),
+			User: struct {
+				field.RelationField
+			}{
+				RelationField: field.NewRelation("User.Tokens.User", "model.User"),
+			},
+		},
 	}
 
 	_grant.fillFieldMap()
@@ -147,6 +160,12 @@ type grantBelongsToUser struct {
 		}
 	}
 	Grants struct {
+		field.RelationField
+		User struct {
+			field.RelationField
+		}
+	}
+	Tokens struct {
 		field.RelationField
 		User struct {
 			field.RelationField

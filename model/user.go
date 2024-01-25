@@ -18,8 +18,9 @@ type User struct {
 	IsAdmin        bool      `gorm:"column:is_admin;not null;default:0;index" json:"is_admin"`
 	IsBlocked      bool      `gorm:"column:is_blocked;not null;default:0;index" json:"is_blocked"`
 
-	Keys   []Key
-	Grants []Grant
+	Keys   []Key   `json:"keys,omitempty"`
+	Grants []Grant `json:"grants,omitempty"`
+	Tokens []Token `json:"tokens,omitempty"`
 }
 
 // SetPassword update password for user

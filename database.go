@@ -95,5 +95,8 @@ func CreateDatabase(dir DataDir) (db *gorm.DB, err error) {
 	if err = db.AutoMigrate(model.All...); err != nil {
 		return
 	}
+	if Debug("db") {
+		db = db.Debug()
+	}
 	return
 }

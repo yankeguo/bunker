@@ -48,6 +48,12 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 					field.RelationField
 				}
 			}
+			Tokens struct {
+				field.RelationField
+				User struct {
+					field.RelationField
+				}
+			}
 		}{
 			RelationField: field.NewRelation("Keys.User", "model.User"),
 			Keys: struct {
@@ -68,6 +74,19 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 					RelationField: field.NewRelation("Keys.User.Grants.User", "model.User"),
 				},
 			},
+			Tokens: struct {
+				field.RelationField
+				User struct {
+					field.RelationField
+				}
+			}{
+				RelationField: field.NewRelation("Keys.User.Tokens", "model.Token"),
+				User: struct {
+					field.RelationField
+				}{
+					RelationField: field.NewRelation("Keys.User.Tokens.User", "model.User"),
+				},
+			},
 		},
 	}
 
@@ -75,6 +94,12 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 		db: db.Session(&gorm.Session{}),
 
 		RelationField: field.NewRelation("Grants", "model.Grant"),
+	}
+
+	_user.Tokens = userHasManyTokens{
+		db: db.Session(&gorm.Session{}),
+
+		RelationField: field.NewRelation("Tokens", "model.Token"),
 	}
 
 	_user.fillFieldMap()
@@ -95,6 +120,8 @@ type user struct {
 	Keys           userHasManyKeys
 
 	Grants userHasManyGrants
+
+	Tokens userHasManyTokens
 
 	fieldMap map[string]field.Expr
 }
@@ -133,7 +160,7 @@ func (u *user) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (u *user) fillFieldMap() {
-	u.fieldMap = make(map[string]field.Expr, 8)
+	u.fieldMap = make(map[string]field.Expr, 9)
 	u.fieldMap["id"] = u.ID
 	u.fieldMap["password_digest"] = u.PasswordDigest
 	u.fieldMap["created_at"] = u.CreatedAt
@@ -164,6 +191,12 @@ type userHasManyKeys struct {
 			field.RelationField
 		}
 		Grants struct {
+			field.RelationField
+			User struct {
+				field.RelationField
+			}
+		}
+		Tokens struct {
 			field.RelationField
 			User struct {
 				field.RelationField
@@ -305,6 +338,77 @@ func (a userHasManyGrantsTx) Clear() error {
 }
 
 func (a userHasManyGrantsTx) Count() int64 {
+	return a.tx.Count()
+}
+
+type userHasManyTokens struct {
+	db *gorm.DB
+
+	field.RelationField
+}
+
+func (a userHasManyTokens) Where(conds ...field.Expr) *userHasManyTokens {
+	if len(conds) == 0 {
+		return &a
+	}
+
+	exprs := make([]clause.Expression, 0, len(conds))
+	for _, cond := range conds {
+		exprs = append(exprs, cond.BeCond().(clause.Expression))
+	}
+	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
+	return &a
+}
+
+func (a userHasManyTokens) WithContext(ctx context.Context) *userHasManyTokens {
+	a.db = a.db.WithContext(ctx)
+	return &a
+}
+
+func (a userHasManyTokens) Session(session *gorm.Session) *userHasManyTokens {
+	a.db = a.db.Session(session)
+	return &a
+}
+
+func (a userHasManyTokens) Model(m *model.User) *userHasManyTokensTx {
+	return &userHasManyTokensTx{a.db.Model(m).Association(a.Name())}
+}
+
+type userHasManyTokensTx struct{ tx *gorm.Association }
+
+func (a userHasManyTokensTx) Find() (result []*model.Token, err error) {
+	return result, a.tx.Find(&result)
+}
+
+func (a userHasManyTokensTx) Append(values ...*model.Token) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Append(targetValues...)
+}
+
+func (a userHasManyTokensTx) Replace(values ...*model.Token) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Replace(targetValues...)
+}
+
+func (a userHasManyTokensTx) Delete(values ...*model.Token) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Delete(targetValues...)
+}
+
+func (a userHasManyTokensTx) Clear() error {
+	return a.tx.Clear()
+}
+
+func (a userHasManyTokensTx) Count() int64 {
 	return a.tx.Count()
 }
 
