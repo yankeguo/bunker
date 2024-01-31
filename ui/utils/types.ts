@@ -1,3 +1,8 @@
+export interface BServer {
+  id: string;
+  address: string;
+}
+
 export interface BKey {
   id: string;
   display_name: string;

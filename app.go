@@ -225,6 +225,49 @@ func (a *App) routeDeleteKey(c ufx.Context) {
 	c.JSON(map[string]any{})
 }
 
+func (a *App) routeListServers(c ufx.Context) {
+	_, _ = a.requireAdmin(c)
+
+	db := dao.Use(a.db)
+
+	servers := rg.Must(db.Server.Find())
+
+	c.JSON(map[string]any{"servers": servers})
+}
+
+func (a *App) routeCreateServer(c ufx.Context) {
+	_, _ = a.requireAdmin(c)
+
+	db := dao.Use(a.db)
+
+	var data struct {
+		ID      string `json:"id" validate:"required"`
+		Address string `json:"address" validate:"required"`
+	}
+
+	c.Bind(&data)
+
+	server := rg.Must(db.Server.Where(db.Server.ID.Eq(data.ID)).Assign(db.Server.Address.Value(data.Address)).FirstOrCreate())
+
+	c.JSON(map[string]any{"server": server})
+}
+
+func (a *App) routeDeleteServer(c ufx.Context) {
+	_, _ = a.requireAdmin(c)
+
+	db := dao.Use(a.db)
+
+	var data struct {
+		ID string `json:"id" validate:"required"`
+	}
+
+	c.Bind(&data)
+
+	rg.Must(db.Server.Where(db.Server.ID.Eq(data.ID)).Delete())
+
+	c.JSON(map[string]any{})
+}
+
 func InstallAppToRouter(a *App, ur ufx.Router) {
 	ur.HandleFunc("/backend/current_user", a.routeCurrentUser)
 	ur.HandleFunc("/backend/sign_in", a.routeSignIn)
@@ -232,4 +275,7 @@ func InstallAppToRouter(a *App, ur ufx.Router) {
 	ur.HandleFunc("/backend/keys", a.routeListKeys)
 	ur.HandleFunc("/backend/keys/create", a.routeCreateKey)
 	ur.HandleFunc("/backend/keys/delete", a.routeDeleteKey)
+	ur.HandleFunc("/backend/servers", a.routeListServers)
+	ur.HandleFunc("/backend/servers/create", a.routeCreateServer)
+	ur.HandleFunc("/backend/servers/delete", a.routeDeleteServer)
 }

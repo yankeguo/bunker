@@ -1046,7 +1046,7 @@ packages:
       '@iconify-json/heroicons': 1.1.19
       '@nuxt/kit': 3.9.3
       '@nuxtjs/color-mode': 3.3.2
-      '@nuxtjs/tailwindcss': 6.11.1
+      '@nuxtjs/tailwindcss': 6.11.2
       '@popperjs/core': 2.11.8
       '@tailwindcss/aspect-ratio': 0.4.2(tailwindcss@3.4.1)
       '@tailwindcss/container-queries': 0.1.1(tailwindcss@3.4.1)
@@ -1154,8 +1154,8 @@ packages:
       - supports-color
     dev: false
 
-  /@nuxtjs/tailwindcss@6.11.1:
-    resolution: {integrity: sha512-6VY4Y6Ntjqx9cw9biBYOjKEhg3M0VFy1FqOAu1CCfdJr26p8XBztaiHS538Zy2nKEqH7MP/Jpi2+8RgfO2m+pA==}
+  /@nuxtjs/tailwindcss@6.11.2:
+    resolution: {integrity: sha512-06e8t9ia6Ru/RPMATuhGwi16rMYeZPseXiI4QmRDk/IkvluU60GxhLZOjdUIa+U7DVCECgDsRNEo/rD8/1sMKQ==}
     dependencies:
       '@nuxt/kit': 3.9.3
       autoprefixer: 10.4.17(postcss@8.4.33)
@@ -1251,8 +1251,8 @@ packages:
     requiresBuild: true
     optional: true
 
-  /@parcel/watcher-wasm@2.3.0:
-    resolution: {integrity: sha512-ejBAX8H0ZGsD8lSICDNyMbSEtPMWgDL0WFCt/0z7hyf5v8Imz4rAM8xY379mBsECkq/Wdqa5WEDLqtjZ+6NxfA==}
+  /@parcel/watcher-wasm@2.4.0:
+    resolution: {integrity: sha512-MNgQ4WCbBybqQ97KwR/hqJGYTg3+s8qHpgIyFWB2qJOBvoJWbXuJGmm4ZkPLq2bMaANqCZqrXwmKYagZTkMKZA==}
     engines: {node: '>= 10.0.0'}
     dependencies:
       is-glob: 4.0.3
@@ -1646,10 +1646,10 @@ packages:
   /@types/http-proxy@1.17.14:
     resolution: {integrity: sha512-SSrD0c1OQzlFX7pGu1eXxSEjemej64aaNPRhhVYUGqXh0BtldAAx37MG8btcumvpgKyZp1F5Gn3JkktdxiFv6w==}
     dependencies:
-      '@types/node': 20.11.7
+      '@types/node': 20.11.10
 
-  /@types/node@20.11.7:
-    resolution: {integrity: sha512-GPmeN1C3XAyV5uybAf4cMLWT9fDWcmQhZVtMFu7OR32WjrqGG+Wnk2V1d0bmtUyE/Zy1QJ9BxyiTih9z8Oks8A==}
+  /@types/node@20.11.10:
+    resolution: {integrity: sha512-rZEfe/hJSGYmdfX9tvcPMYeYPW2sNl50nsw4jZmRcaG0HIAb0WYEpsB05GOb53vjqpyE9GUhlDQ4jLSoB5q9kg==}
     dependencies:
       undici-types: 5.26.5
 
@@ -2155,7 +2155,7 @@ packages:
       postcss: ^8.1.0
     dependencies:
       browserslist: 4.22.3
-      caniuse-lite: 1.0.30001580
+      caniuse-lite: 1.0.30001581
       fraction.js: 4.3.7
       normalize-range: 0.1.2
       picocolors: 1.0.0
@@ -2205,7 +2205,7 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
     dependencies:
-      caniuse-lite: 1.0.30001580
+      caniuse-lite: 1.0.30001581
       electron-to-chromium: 1.4.648
       node-releases: 2.0.14
       update-browserslist-db: 1.0.13(browserslist@4.22.3)
@@ -2293,12 +2293,12 @@ packages:
     resolution: {integrity: sha512-bsTwuIg/BZZK/vreVTYYbSWoe2F+71P7K5QGEX+pT250DZbfU1MQ5prOKpPR+LL6uWKK3KMwMCAS74QB3Um1uw==}
     dependencies:
       browserslist: 4.22.3
-      caniuse-lite: 1.0.30001580
+      caniuse-lite: 1.0.30001581
       lodash.memoize: 4.1.2
       lodash.uniq: 4.5.0
 
-  /caniuse-lite@1.0.30001580:
-    resolution: {integrity: sha512-mtj5ur2FFPZcCEpXFy8ADXbDACuNFXg6mxVDqp7tqooX6l3zwm+d8EPoeOSIFRDvHs8qu7/SLFOGniULkcH2iA==}
+  /caniuse-lite@1.0.30001581:
+    resolution: {integrity: sha512-whlTkwhqV2tUmP3oYhtNfaWGYHDdS3JYFQBKXxcUR9qqPWsRhFHhoISO2Xnl/g0xyKzht9mI1LZpiNWfMzHixQ==}
 
   /chalk@2.4.2:
     resolution: {integrity: sha512-Mti+f9lpJNcwF4tWV8/OrTTtF1gZi+f8FqlyAdouralcFWFQWF2+NgCHShjkCb+IFBLq9buZwE1xckQU4peSuQ==}
@@ -2508,6 +2508,9 @@ packages:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
+
+  /crossws@0.1.0:
+    resolution: {integrity: sha512-k/CMEn83hK9xflL4RD4puf+qOgTjTsA8svK+u/fkbKCrVzthkWAhiXpXc49Ju5V+aa3TqM3EW+0ROixh1MclzA==}
 
   /css-declaration-sorter@7.1.1(postcss@8.4.33):
     resolution: {integrity: sha512-dZ3bVTEEc1vxr3Bek9vGwfB5Z6ESPULhcRvO472mfjVnj8jRcTnKO8/JTczlvxM10Myb+wBM++1MtdO76eWcaQ==}
@@ -3665,15 +3668,16 @@ packages:
     resolution: {integrity: sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==}
     dev: false
 
-  /listhen@1.5.6:
-    resolution: {integrity: sha512-gTpEJhT5L85L0bFgmu+Boqu5rP4DwDtEb4Exq5gdQUxWRwx4jbzdInZkmyLONo5EwIcQB0k7ZpWlpCDPdL77EQ==}
+  /listhen@1.6.0:
+    resolution: {integrity: sha512-z0RcEXVX5oTpY1bO02SKoTU/kmZSrFSngNNzHRM6KICR17PTq7ANush6AE6ztGJwJD4RLpBrVHd9GnV51J7s3w==}
     hasBin: true
     dependencies:
       '@parcel/watcher': 2.4.0
-      '@parcel/watcher-wasm': 2.3.0
+      '@parcel/watcher-wasm': 2.4.0
       citty: 0.1.5
       clipboardy: 4.0.0
       consola: 3.2.3
+      crossws: 0.1.0
       defu: 6.1.4
       get-port-please: 3.1.2
       h3: 1.10.1
@@ -4067,7 +4071,7 @@ packages:
       jiti: 1.21.0
       klona: 2.0.6
       knitwork: 1.0.0
-      listhen: 1.5.6
+      listhen: 1.6.0
       magic-string: 0.30.5
       mime: 3.0.0
       mlly: 1.5.0
@@ -5881,7 +5885,7 @@ packages:
       destr: 2.0.2
       h3: 1.10.1
       ioredis: 5.3.2
-      listhen: 1.5.6
+      listhen: 1.6.0
       lru-cache: 10.2.0
       mri: 1.2.0
       node-fetch-native: 1.6.1

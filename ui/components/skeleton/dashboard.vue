@@ -6,6 +6,8 @@ const props = defineProps<{
 
 const route = useRoute();
 
+const { data: user } = await useCurrentUser();
+
 const links = [
   [
     {
@@ -13,16 +15,20 @@ const links = [
       icon: "i-mdi-view-dashboard",
       to: { name: "dashboard" },
     },
-    {
-      label: "Servers",
-      icon: "i-mdi-server",
-      to: { name: "dashboard-servers" },
-    },
-    {
-      label: "Users",
-      icon: "i-mdi-account-multiple",
-      to: { name: "dashboard-users" },
-    },
+    ...(user.value.user?.is_admin
+      ? [
+          {
+            label: "Servers",
+            icon: "i-mdi-server",
+            to: { name: "dashboard-servers" },
+          },
+          {
+            label: "Users",
+            icon: "i-mdi-account-multiple",
+            to: { name: "dashboard-users" },
+          },
+        ]
+      : []),
   ],
   [
     {

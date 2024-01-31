@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { FormError, FormSubmitEvent } from "#ui/types";
+import { guardWorking } from "~/composables/error";
 
 const state = reactive({
   username: undefined,
@@ -13,21 +14,20 @@ const validate = (state: any): FormError[] => {
   return errors;
 };
 
+const working = ref(0);
+
 async function onSubmit(event: FormSubmitEvent<any>) {
-  try {
-    const { user, token }: any = await $fetch("/backend/sign_in", {
+  return guardWorking(working, async () => {
+    $fetch("/backend/sign_in", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(event.data),
     });
+    await refreshCurrentUser();
     navigateTo({ name: "dashboard" });
-  } catch (e: any) {
-    handleError(e);
-  } finally {
-    refreshCurrentUser();
-  }
+  })
 }
 
 const { data: currentUser, refresh: refreshCurrentUser } =
@@ -39,28 +39,15 @@ if (currentUser.value.user && currentUser.value.token) {
 </script>
 
 <template>
-  <div
-    class="absolute top-0 left-0 w-full h-full flex flex-col justify-center items-center"
-  >
+  <div class="absolute top-0 left-0 w-full h-full flex flex-col justify-center items-center">
     <div class="mb-12 text-center">
       <div class="font-semibold font-mono text-4xl mb-6">Bunker System</div>
-      <UButton
-        size="sm"
-        icon="i-simple-icons-github"
-        variant="link"
-        to="https://github.com/yankeguo/bunker"
-        target="_blank"
-        label="yankeguo/bunker"
-      ></UButton>
+      <UButton size="sm" icon="i-simple-icons-github" variant="link" to="https://github.com/yankeguo/bunker"
+        target="_blank" label="yankeguo/bunker"></UButton>
     </div>
 
     <UCard class="w-80">
-      <UForm
-        :validate="validate"
-        :state="state"
-        class="space-y-4"
-        @submit="onSubmit"
-      >
+      <UForm :validate="validate" :state="state" class="space-y-4" @submit="onSubmit">
         <UFormGroup label="Username" name="username">
           <UInput v-model="state.username" />
         </UFormGroup>
@@ -69,7 +56,7 @@ if (currentUser.value.user && currentUser.value.token) {
           <UInput v-model="state.password" type="password" />
         </UFormGroup>
 
-        <UButton type="submit" icon="i-mdi-login">Sign In</UButton>
+        <UButton type="submit" icon="i-mdi-login" :disabled="!!working" :loading="!!working">Sign In</UButton>
       </UForm>
     </UCard>
 
