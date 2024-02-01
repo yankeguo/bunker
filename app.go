@@ -2,6 +2,7 @@ package bunker
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"net/http"
@@ -340,6 +341,68 @@ func (a *App) routeUpdateUser(c ufx.Context) {
 	c.JSON(map[string]any{})
 }
 
+func (a *App) routeListGrants(c ufx.Context) {
+	_, _ = a.requireAdmin(c)
+
+	var data struct {
+		UserID string `json:"user_id"`
+	}
+
+	c.Bind(&data)
+
+	db := dao.Use(a.db)
+
+	grants := rg.Must(db.Grant.Where(db.Grant.UserID.Eq(data.UserID)).Find())
+
+	c.JSON(map[string]any{"grants": grants})
+}
+
+func (a *App) routeCreateGrant(c ufx.Context) {
+	_, _ = a.requireAdmin(c)
+
+	db := dao.Use(a.db)
+
+	var data struct {
+		UserID     string `json:"user_id" validate:"required"`
+		ServerUser string `json:"server_user" validate:"required"`
+		ServerID   string `json:"server_id" validate:"required"`
+	}
+	c.Bind(&data)
+
+	digest := sha256.Sum256([]byte(data.UserID + "::" + data.ServerUser + "@" + data.ServerID))
+	id := hex.EncodeToString(digest[:])
+
+	grant := &model.Grant{
+		ID:         id,
+		UserID:     data.UserID,
+		ServerUser: data.ServerUser,
+		ServerID:   data.ServerID,
+	}
+
+	rg.Must0(db.Grant.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoNothing: true,
+	}).Create(grant))
+
+	c.JSON(map[string]any{"grant": grant})
+}
+
+func (a *App) routeDeleteGrant(c ufx.Context) {
+	_, _ = a.requireAdmin(c)
+
+	db := dao.Use(a.db)
+
+	var data struct {
+		ID string `json:"id" validate:"required"`
+	}
+
+	c.Bind(&data)
+
+	rg.Must(db.Grant.Where(db.Grant.ID.Eq(data.ID)).Delete())
+
+	c.JSON(map[string]any{})
+}
+
 func InstallAppToRouter(a *App, ur ufx.Router) {
 	ur.HandleFunc("/backend/current_user", a.routeCurrentUser)
 	ur.HandleFunc("/backend/sign_in", a.routeSignIn)
@@ -353,4 +416,7 @@ func InstallAppToRouter(a *App, ur ufx.Router) {
 	ur.HandleFunc("/backend/users", a.routeListUsers)
 	ur.HandleFunc("/backend/users/create", a.routeCreateUser)
 	ur.HandleFunc("/backend/users/update", a.routeUpdateUser)
+	ur.HandleFunc("/backend/grants", a.routeListGrants)
+	ur.HandleFunc("/backend/grants/create", a.routeCreateGrant)
+	ur.HandleFunc("/backend/grants/delete", a.routeDeleteGrant)
 }

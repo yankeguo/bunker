@@ -17,27 +17,27 @@ const links = [
     },
     ...(user.value.user?.is_admin
       ? [
-          {
-            label: "Servers",
-            icon: "i-mdi-server",
-            to: { name: "dashboard-servers" },
-          },
-          {
-            label: "Users",
-            icon: "i-mdi-account-multiple",
-            to: { name: "dashboard-users" },
-          },
-        ]
+        {
+          label: "Servers",
+          icon: "i-mdi-server",
+          to: { name: "dashboard-servers" },
+        },
+        {
+          label: "Users",
+          icon: "i-mdi-account-multiple",
+          to: { name: "dashboard-users" },
+        },
+      ]
       : []),
   ],
   [
     {
-      label: "My SSH Keys",
+      label: "SSH Keys",
       icon: "i-mdi-key-chain",
       to: { name: "dashboard-profile-keys" },
     },
     {
-      label: "My Profile",
+      label: "Profile",
       icon: "i-mdi-account-circle",
       to: { name: "dashboard-profile" },
     },
@@ -46,31 +46,24 @@ const links = [
 </script>
 
 <template>
-  <div class="flex flex-col md:flex-row my-6">
+  <div class="flex flex-col my-6">
+
     <Head>
       <Title>Bunker - {{ titleName }}</Title>
     </Head>
 
-    <div
-      class="w-full md:w-1/3 lg:w-1/5 px-3 py-6 flex flex-col items-center md:items-end"
-    >
-      <UVerticalNavigation
-        class="w-full"
-        :ui="{ size: 'text-lg' }"
-        :links="links"
-      />
+    <UHorizontalNavigation :links="links" class="w-full border-b border-gray-200 dark:border-gray-800" />
+
+    <div class="flex flex-row items-center mt-8 px-2.5">
+      <UIcon :name="titleIcon" class="text-2xl font-semibold me-2" size="lg"></UIcon>
+      <span class="text-2xl font-semibold">{{ titleName }}</span>
     </div>
 
-    <div class="w-full md:w-2/3 lg:w-4/5 px-12 py-6">
-      <div class="flex flex-row items-center">
-        <UIcon
-          :name="titleIcon"
-          class="text-2xl font-semibold me-2"
-          size="lg"
-        ></UIcon>
-        <span class="text-2xl font-semibold">{{ titleName }}</span>
+    <div class="flex flex-row mt-8 px-2.5">
+      <div class="w-80 me-8">
+        <slot name="left"></slot>
       </div>
-      <div class="flex flex-col mt-8 px-1">
+      <div class="flex-grow">
         <slot></slot>
       </div>
     </div>

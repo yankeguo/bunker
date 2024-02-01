@@ -9,12 +9,12 @@ const props = defineProps<{
 
 <template>
   <template v-for="field in fields" v-bind:key="field.name">
-    <div class="my-2">
+    <div class="mb-1">
       <label class="text-gray-900 dark:text-white font-semibold">{{
         field.name
       }}</label>
     </div>
-    <div>
+    <div class="mb-2">
       <span class="text-gray-500 dark:text-gray-400">{{ field.content }}</span>
     </div>
   </template>

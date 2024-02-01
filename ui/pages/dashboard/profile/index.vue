@@ -32,14 +32,13 @@ async function doSignOut() {
 
 <template>
   <SkeletonDashboard title-name="Profile" title-icon="i-mdi-account-circle">
-    <SimpleFields :fields="fields"></SimpleFields>
-    <div class="mt-6">
-      <UButton
-        icon="i-mdi-logout"
-        label="Sign out"
-        color="red"
-        @click="doSignOut"
-      ></UButton>
-    </div>
+    <template #left>
+      <UCard :ui="uiCard">
+        <SimpleFields :fields="fields"></SimpleFields>
+        <div class="mt-6">
+          <UButton icon="i-mdi-logout" label="Sign out" color="red" @click="doSignOut"></UButton>
+        </div>
+      </UCard>
+    </template>
   </SkeletonDashboard>
 </template>

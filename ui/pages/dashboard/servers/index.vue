@@ -83,15 +83,8 @@ async function deleteServer(id: string) {
 
 <template>
   <SkeletonDashboard title-name="Servers" title-icon="i-mdi-server">
-    <div class="w-1/3">
-      <UCard :ui="{
-        body: {
-          padding: 'p-1',
-        },
-        header: {
-          padding: 'p-1',
-        },
-      }">
+    <template #left>
+      <UCard :ui="uiCard">
         <template #header>
           <div class="flex flex-row items-center">
             <UIcon name="i-mdi-server-plus" class="me-1"></UIcon>
@@ -100,18 +93,34 @@ async function deleteServer(id: string) {
         </template>
         <UForm :validate="validate" :state="state" class="space-y-4" @submit="onSubmit">
           <UFormGroup label="Name" name="id">
-            <UInput v-model="state.id" />
+            <UInput v-model="state.id" placeholder="Input server name" />
           </UFormGroup>
 
           <UFormGroup label="Address" name="address">
-            <UInput v-model="state.address" />
+            <UInput v-model="state.address" placeholder="Input server address" />
           </UFormGroup>
 
           <UButton type="submit" icon="i-mdi-check-circle" label="Submit" :loading="!!working" :disabled="!!working">
           </UButton>
         </UForm>
       </UCard>
-    </div>
+
+      <div class="pt-8">
+        <UCard :ui="uiCard">
+          <p>
+            Add the following public key to the server's authorized_keys file.
+          </p>
+          <template #footer>
+            <UButton variant="link" to="/backend/authorized_keys" target="_blank" label="Server Authorized Keys">
+              <template #trailing>
+                <UIcon name="i-heroicons-arrow-right-20-solid" />
+              </template>
+            </UButton>
+          </template>
+        </UCard>
+      </div>
+    </template>
+
     <UTable class="mt-4" :rows="servers.servers" :columns="columns">
       <template #actions-data="{ row }">
         <UButton variant="link" color="blue" icon="i-mdi-edit" label="Edit" @click="editServer(row)" :disabled="!!working"

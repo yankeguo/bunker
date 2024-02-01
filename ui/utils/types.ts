@@ -25,3 +25,11 @@ export interface BToken {
   created_at: string;
   visited_at: string;
 }
+
+export interface BGrant {
+  id: string;
+  user_id: string;
+  server_user: string;
+  server_id: string;
+  created_at: string;
+}
