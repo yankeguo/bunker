@@ -14,7 +14,9 @@ import (
 	"github.com/yankeguo/ufx"
 	"go.uber.org/fx"
 	"golang.org/x/crypto/ssh"
+	"gorm.io/gen/field"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type App struct {
@@ -268,6 +270,76 @@ func (a *App) routeDeleteServer(c ufx.Context) {
 	c.JSON(map[string]any{})
 }
 
+func (a *App) routeListUsers(c ufx.Context) {
+	_, _ = a.requireAdmin(c)
+
+	db := dao.Use(a.db)
+
+	users := rg.Must(db.User.Find())
+
+	c.JSON(map[string]any{"users": users})
+}
+
+func (a *App) routeCreateUser(c ufx.Context) {
+	_, _ = a.requireAdmin(c)
+
+	db := dao.Use(a.db)
+
+	var data struct {
+		ID       string `json:"id" validate:"required"`
+		Password string `json:"password" validate:"required"`
+	}
+	c.Bind(&data)
+
+	user := &model.User{
+		ID:        data.ID,
+		CreatedAt: time.Now(),
+		VisitedAt: time.Now(),
+	}
+	user.SetPassword(data.Password)
+
+	rg.Must0(db.User.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"password_digest"}),
+	}).Create(user))
+
+	c.JSON(map[string]any{"user": user})
+}
+
+func (a *App) routeUpdateUser(c ufx.Context) {
+	_, u := a.requireAdmin(c)
+
+	db := dao.Use(a.db)
+
+	var data struct {
+		ID        string `json:"id" validate:"required"`
+		IsAdmin   *bool  `json:"is_admin"`
+		IsBlocked *bool  `json:"is_blocked"`
+	}
+	c.Bind(&data)
+
+	if u.ID == data.ID {
+		halt.String("cannot edit self", halt.WithBadRequest())
+		return
+	}
+
+	var assigns []field.AssignExpr
+
+	if data.IsAdmin != nil {
+		assigns = append(assigns, db.User.IsAdmin.Value(*data.IsAdmin))
+	}
+
+	if data.IsBlocked != nil {
+		assigns = append(assigns, db.User.IsBlocked.Value(*data.IsBlocked))
+	}
+
+	if len(assigns) != 0 {
+		rg.Must(db.User.Where(db.User.ID.Eq(data.ID)).UpdateColumnSimple(assigns...))
+	}
+
+	c.JSON(map[string]any{})
+}
+
 func InstallAppToRouter(a *App, ur ufx.Router) {
 	ur.HandleFunc("/backend/current_user", a.routeCurrentUser)
 	ur.HandleFunc("/backend/sign_in", a.routeSignIn)
@@ -278,4 +350,7 @@ func InstallAppToRouter(a *App, ur ufx.Router) {
 	ur.HandleFunc("/backend/servers", a.routeListServers)
 	ur.HandleFunc("/backend/servers/create", a.routeCreateServer)
 	ur.HandleFunc("/backend/servers/delete", a.routeDeleteServer)
+	ur.HandleFunc("/backend/users", a.routeListUsers)
+	ur.HandleFunc("/backend/users/create", a.routeCreateUser)
+	ur.HandleFunc("/backend/users/update", a.routeUpdateUser)
 }

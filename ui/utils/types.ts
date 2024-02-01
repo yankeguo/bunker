@@ -14,7 +14,8 @@ export interface BUser {
   id: string;
   created_at: string;
   visited_at: string;
-  is_admin: string;
+  is_admin: boolean;
+  is_blocked: boolean;
 }
 
 export interface BToken {

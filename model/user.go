@@ -23,6 +23,15 @@ type User struct {
 	Tokens []Token `json:"tokens,omitempty"`
 }
 
+func CreateUserPassword(p string) (string, error) {
+	var b []byte
+	var err error
+	if b, err = bcrypt.GenerateFromPassword([]byte(p), bcrypt.DefaultCost); err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 // SetPassword update password for user
 // bcrypt produces clear text encrypted password, no further encoding needed
 func (u *User) SetPassword(p string) (err error) {

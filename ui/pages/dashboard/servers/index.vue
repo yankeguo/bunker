@@ -2,6 +2,10 @@
 import type { FormError, FormSubmitEvent } from "#ui/types";
 import { guardWorking } from "~/composables/error";
 
+definePageMeta({
+  middleware: ["auth"],
+});
+
 const { data: servers, refresh: refreshServers } = await useServers();
 
 const columns = [

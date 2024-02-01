@@ -11,3 +11,15 @@ export const useCurrentUser = async () => {
     },
   });
 };
+
+export const useUsers = () => {
+  return useAsyncData<{ users: BUser[] }>(
+    "servers",
+    () => $fetch("/backend/users"),
+    {
+      default() {
+        return { users: [] };
+      },
+    }
+  );
+};

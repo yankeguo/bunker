@@ -18,7 +18,7 @@ const working = ref(0);
 
 async function onSubmit(event: FormSubmitEvent<any>) {
   return guardWorking(working, async () => {
-    $fetch("/backend/sign_in", {
+    await $fetch("/backend/sign_in", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
