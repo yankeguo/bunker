@@ -2,6 +2,8 @@
 import type { FormError, FormSubmitEvent } from "#ui/types";
 import { guardWorking } from "~/composables/error";
 
+const { $t } = useNuxtApp();
+
 definePageMeta({
   middleware: ["auth"],
 });
@@ -9,11 +11,11 @@ definePageMeta({
 const columns = [
   {
     key: "display_name",
-    label: "Name",
+    label: $t('common.ssh_key_display_name'),
   },
   {
     key: "id",
-    label: "Fingerprint",
+    label: $t('common.ssh_key_id'),
   },
   {
     key: "actions",
@@ -73,23 +75,24 @@ async function onSubmit(event: FormSubmitEvent<any>) {
 </script>
 
 <template>
-  <SkeletonDashboard title-name="SSH Keys" title-icon="i-mdi-key-chain">
+  <SkeletonDashboard :title-name="$t('ssh_keys.title')" title-icon="i-mdi-key-chain">
     <template #left>
       <UCard :ui="uiCard">
         <template #header>
           <UIcon name="i-mdi-key-plus" class="me-1"></UIcon>
-          <span>Add Key</span>
+          <span>{{ $t('ssh_keys.add_ssh_key') }}</span>
         </template>
         <UForm :validate="validate" :state="state" class="space-y-4" @submit="onSubmit">
-          <UFormGroup label="Name" name="display_name">
-            <UInput v-model="state.display_name" placeholder="Input name" />
+          <UFormGroup :label="$t('common.ssh_key_display_name')" name="display_name">
+            <UInput v-model="state.display_name" :placeholder="$t('ssh_keys.input_display_name')" />
           </UFormGroup>
 
-          <UFormGroup label="Public Key" name="public_key">
-            <UTextarea v-model="state.public_key" :rows="12" placeholder="Input ssh public key" />
+          <UFormGroup :label="$t('ssh_keys.public_key')" name="public_key">
+            <UTextarea v-model="state.public_key" :rows="12" :placeholder="$t('ssh_keys.input_public_key')" />
           </UFormGroup>
 
-          <UButton type="submit" :disabled="!!working" :loading="!!working" icon="i-mdi-check" label="Submit">
+          <UButton type="submit" :disabled="!!working" :loading="!!working" icon="i-mdi-check"
+            :label="$t('common.submit')">
           </UButton>
         </UForm>
       </UCard>
@@ -97,7 +100,8 @@ async function onSubmit(event: FormSubmitEvent<any>) {
 
     <UTable :rows="keys.keys" :columns="columns">
       <template #actions-data="{ row }">
-        <UButton variant="link" color="red" icon="i-mdi-trash" label="Delete" @click="deleteKey(row.id)"></UButton>
+        <UButton variant="link" color="red" icon="i-mdi-trash" :label="$t('common.delete')" @click="deleteKey(row.id)">
+        </UButton>
       </template>
     </UTable>
 

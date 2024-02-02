@@ -2,6 +2,8 @@
 import type { FormError, FormSubmitEvent } from "#ui/types";
 import { guardWorking } from "~/composables/error";
 
+const { $t } = useNuxtApp()
+
 definePageMeta({
     middleware: ["auth"],
 })
@@ -11,15 +13,15 @@ const { data: grants, refresh: refreshGrants } = await useGrants(useRoute().para
 const columns = [
     {
         key: "server_user",
-        label: 'Server User'
+        label: $t('common.server_user')
     },
     {
         key: 'server_id',
-        label: 'Server ID'
+        label: $t('common.server_id')
     },
     {
         key: 'created_at',
-        label: 'Created At'
+        label: $t('common.created_at')
     },
     {
         key: 'actions'
@@ -82,27 +84,31 @@ async function deleteGrant({ id, server_user, server_id }: { id: string; server_
 </script>
 
 <template>
-    <SkeletonDashboard :title-name="'Grants: ' + $route.params.user_id" title-icon="i-mdi-server-shield">
+    <SkeletonDashboard :title-name="$t('grants.title') + ' - ' + $route.params.user_id" title-icon="i-mdi-server-shield">
         <template #left>
             <UCard :ui="uiCard">
                 <template #header>
                     <div class="flex flex-row items-center">
                         <UIcon name="i-mdi-server-plus" class="me-1"></UIcon>
-                        <span>Add Grant</span>
+                        <span>{{ $t('grants.add_grant') }}</span>
                     </div>
                 </template>
                 <UForm :validate="validate" :state="state" class="space-y-4" @submit="onSubmit">
-                    <UFormGroup label="Server User" name="server_user">
+                    <UFormGroup :label="$t('common.server_user')" name="server_user">
                         <UInput v-model="state.server_user" />
                     </UFormGroup>
 
-                    <UFormGroup label="Server ID" name="server_id">
+                    <UFormGroup :label="$t('common.server_id')" name="server_id">
                         <UInput v-model="state.server_id" type="password" />
                     </UFormGroup>
 
-                    <UButton type="submit" icon="i-mdi-check-circle" label="Submit" :loading="!!working"
+                    <UButton type="submit" icon="i-mdi-check-circle" :label="$t('common.submit')" :loading="!!working"
                         :disabled="!!working">
                     </UButton>
+
+                    <UFormGroup>
+                        <p class="text-sm text-slate-600 dark:text-slate-400">{{ $t('grants.intro_asterisk') }}</p>
+                    </UFormGroup>
                 </UForm>
             </UCard>
         </template>
@@ -110,8 +116,8 @@ async function deleteGrant({ id, server_user, server_id }: { id: string; server_
 
         <UTable :rows="grants.grants" :columns="columns">
             <template #actions-data="{ row }">
-                <UButton variant="link" color="red" icon="i-mdi-trash" label="Delete" @click="deleteGrant(row)"
-                    :disabled="!!working" :loading="!!working"></UButton>
+                <UButton variant="link" color="red" icon="i-mdi-trash" :label="$t('common.delete')"
+                    @click="deleteGrant(row)" :disabled="!!working" :loading="!!working"></UButton>
             </template>
         </UTable>
 

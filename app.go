@@ -117,6 +117,12 @@ func (a *App) routeSignIn(c ufx.Context) {
 	}
 	user.PasswordDigest = ""
 
+	// must not blocked
+	if user.IsBlocked {
+		halt.String("blocked", halt.WithBadRequest())
+		return
+	}
+
 	// delete history tokens
 	rg.Must(db.Token.Where(db.Token.UserID.Eq(user.ID), db.Token.CreatedAt.Lte(time.Now().Add(-time.Hour*24*7))).Delete())
 
@@ -451,9 +457,34 @@ func (a *App) routeGrantedItems(c ufx.Context) {
 	c.JSON(map[string]any{"granted_items": grantedItems})
 }
 
+func (a *App) routeUpdatePassword(c ufx.Context) {
+	_, u := a.requireUser(c)
+
+	var data struct {
+		OldPassword string `json:"old_password" validate:"required"`
+		NewPassword string `json:"new_password" validate:"required,min=6"`
+	}
+
+	c.Bind(&data)
+
+	if !u.CheckPassword(data.OldPassword) {
+		halt.String("invalid old password", halt.WithBadRequest())
+		return
+	}
+
+	u.SetPassword(data.NewPassword)
+
+	db := dao.Use(a.db)
+
+	rg.Must(db.User.Where(db.User.ID.Eq(u.ID)).UpdateColumnSimple(db.User.PasswordDigest.Value(u.PasswordDigest)))
+
+	c.JSON(map[string]any{})
+}
+
 func InstallAppToRouter(a *App, ur ufx.Router) {
 	ur.HandleFunc("/backend/sign_in", a.routeSignIn)
 	ur.HandleFunc("/backend/sign_out", a.routeSignOut)
+	ur.HandleFunc("/backend/update_password", a.routeUpdatePassword)
 	ur.HandleFunc("/backend/current_user", a.routeCurrentUser)
 	ur.HandleFunc("/backend/granted_items", a.routeGrantedItems)
 	ur.HandleFunc("/backend/keys", a.routeListKeys)

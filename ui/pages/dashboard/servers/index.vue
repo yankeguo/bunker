@@ -2,6 +2,8 @@
 import type { FormError, FormSubmitEvent } from "#ui/types";
 import { guardWorking } from "~/composables/error";
 
+const { $t } = useNuxtApp();
+
 definePageMeta({
   middleware: ["auth"],
 });
@@ -11,11 +13,11 @@ const { data: servers, refresh: refreshServers } = await useServers();
 const columns = [
   {
     key: "id",
-    label: "Name",
+    label: $t('common.server_id'),
   },
   {
     key: "address",
-    label: "Address",
+    label: $t('common.server_address'),
   },
   {
     key: 'actions'
@@ -93,11 +95,11 @@ async function deleteServer(id: string) {
         </template>
         <UForm :validate="validate" :state="state" class="space-y-4" @submit="onSubmit">
           <UFormGroup :label="$t('common.server_id')" name="id">
-            <UInput v-model="state.id" placeholder="Input server name" />
+            <UInput v-model="state.id" :placeholder="$t('servers.input_server_id')" />
           </UFormGroup>
 
           <UFormGroup :label="$t('common.server_address')" name="address">
-            <UInput v-model="state.address" placeholder="Input server address" />
+            <UInput v-model="state.address" :placeholder="$t('servers.input_server_address')" />
           </UFormGroup>
 
           <UButton type="submit" icon="i-mdi-check-circle" :label="$t('common.submit')" :loading="!!working"
@@ -108,11 +110,10 @@ async function deleteServer(id: string) {
 
       <div class="pt-8">
         <UCard :ui="uiCard">
-          <p>
-            Add the following public key to the server's authorized_keys file.
-          </p>
+          <article class="prose dark:prose-invert" v-html="$t('servers.intro_authorized_keys')"></article>
           <template #footer>
-            <UButton variant="link" to="/backend/authorized_keys" target="_blank" label="Server Authorized Keys">
+            <UButton variant="link" to="/backend/authorized_keys" target="_blank"
+              :label="$t('servers.view_authorized_keys')">
               <template #trailing>
                 <UIcon name="i-heroicons-arrow-right-20-solid" />
               </template>
@@ -122,12 +123,12 @@ async function deleteServer(id: string) {
       </div>
     </template>
 
-    <UTable class="mt-4" :rows="servers.servers" :columns="columns">
+    <UTable :rows="servers.servers" :columns="columns">
       <template #actions-data="{ row }">
-        <UButton variant="link" color="blue" icon="i-mdi-edit" label="Edit" @click="editServer(row)" :disabled="!!working"
-          :loading="!!working"></UButton>
+        <UButton variant="link" color="blue" icon="i-mdi-edit" :label="$t('common.edit')" @click="editServer(row)"
+          :disabled="!!working" :loading="!!working"></UButton>
 
-        <UButton variant="link" color="red" icon="i-mdi-trash" label="Delete" @click="deleteServer(row.id)"
+        <UButton variant="link" color="red" icon="i-mdi-trash" :label="$t('common.delete')" @click="deleteServer(row.id)"
           :disabled="!!working" :loading="!!working"></UButton>
       </template>
 

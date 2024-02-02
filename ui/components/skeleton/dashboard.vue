@@ -24,7 +24,7 @@ const links = [
           to: { name: "dashboard-servers" },
         },
         {
-          label: "Users",
+          label: $t('users.title'),
           icon: "i-mdi-account-multiple",
           to: { name: "dashboard-users" },
         },
@@ -33,12 +33,12 @@ const links = [
   ],
   [
     {
-      label: "SSH Keys",
+      label: $t('ssh_keys.title'),
       icon: "i-mdi-key-chain",
       to: { name: "dashboard-profile-keys" },
     },
     {
-      label: "Profile",
+      label: $t('profile.title'),
       icon: "i-mdi-account-circle",
       to: { name: "dashboard-profile" },
     },

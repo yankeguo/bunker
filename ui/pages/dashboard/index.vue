@@ -37,7 +37,7 @@ function expandServerUser(s: string): string {
   <SkeletonDashboard :title-name="$t('dashboard.title')" title-icon="i-mdi-view-dashboard">
     <template #left>
       <UCard :ui="uiCard">
-        <p></p>
+        <article class="prose dark:prose-invert" v-html="$t('dashboard.intro')"></article>
       </UCard>
     </template>
     <UTable :rows="items.granted_items" :columns="columns">

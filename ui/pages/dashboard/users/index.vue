@@ -2,6 +2,8 @@
 import type { FormError, FormSubmitEvent } from "#ui/types";
 import { guardWorking } from "~/composables/error";
 
+const { $t } = useNuxtApp()
+
 definePageMeta({
   middleware: ["auth"],
 });
@@ -11,11 +13,11 @@ const { data: users, refresh: refreshUsers } = await useUsers();
 const columns = [
   {
     key: "id",
-    label: "Username",
+    label: $t('common.user_id'),
   },
   {
     key: "role",
-    label: 'Role'
+    label: $t('common.user_role'),
   },
   {
     key: 'actions'
@@ -89,25 +91,26 @@ async function updateUser(id: string, { is_admin, is_blocked }: { is_admin?: boo
 </script>
 
 <template>
-  <SkeletonDashboard title-name="Users" title-icon="i-mdi-account-multiple">
+  <SkeletonDashboard :title-name="$t('users.title')" title-icon="i-mdi-account-multiple">
     <template #left>
       <UCard :ui="uiCard">
         <template #header>
           <div class="flex flex-row items-center">
             <UIcon name="i-mdi-user-plus" class="me-1"></UIcon>
-            <span>Add / Update User</span>
+            <span>{{ $t('users.add_update_user') }}</span>
           </div>
         </template>
         <UForm :validate="validate" :state="state" class="space-y-4" @submit="onSubmit">
-          <UFormGroup label="Name" name="id">
-            <UInput v-model="state.id" placeholder="Input username" />
+          <UFormGroup :label="$t('common.user_id')" name="id">
+            <UInput v-model="state.id" :placeholder="$t('users.input_user_id')" />
           </UFormGroup>
 
-          <UFormGroup label="Password" name="password">
-            <UInput v-model="state.password" type="password" placeholder="Input password" />
+          <UFormGroup :label="$t('common.password')" name="password">
+            <UInput v-model="state.password" type="password" :placeholder="$t('users.input_password')" />
           </UFormGroup>
 
-          <UButton type="submit" icon="i-mdi-check-circle" label="Submit" :loading="!!working" :disabled="!!working">
+          <UButton type="submit" icon="i-mdi-check-circle" :label="$t('common.submit')" :loading="!!working"
+            :disabled="!!working">
           </UButton>
         </UForm>
       </UCard>
@@ -120,24 +123,27 @@ async function updateUser(id: string, { is_admin, is_blocked }: { is_admin?: boo
         </UButton>
       </template>
       <template #role-data="{ row }">
-        <UBadge color="red" class="me-2" v-if="row.is_blocked">Disabled</UBadge>
-        <UBadge variant="outline" color="lime" v-else-if="row.is_admin">Admin</UBadge>
-        <UBadge variant="outline" v-else>Normal</UBadge>
+        <UBadge color="red" class="me-2" v-if="row.is_blocked">{{ $t('common.user_role_disabled') }}</UBadge>
+        <UBadge variant="outline" color="lime" v-else-if="row.is_admin">{{ $t('common.user_role_admin') }}</UBadge>
+        <UBadge variant="outline" v-else>{{ $t('common.user_role_standard') }}</UBadge>
       </template>
       <template #actions-data="{ row }">
         <template v-if="!row.is_blocked">
-          <UButton class="w-40" v-if="row.is_admin" variant="ghost" color="red" icon="i-mdi-account-tie-voice-off"
-            label="Revoke Admin" @click="updateUser(row.id, { is_admin: false })" :disabled="!!working"
+          <UButton class="w-30" v-if="row.is_admin" variant="ghost" color="red" icon="i-mdi-account-tie-voice-off"
+            :label="$t('users.revoke_admin')" @click="updateUser(row.id, { is_admin: false })" :disabled="!!working"
             :loading="!!working"></UButton>
-          <UButton class="w-40" v-else variant="ghost" color="lime" icon="i-mdi-account-tie-voice" label="Assign Admin"
-            @click="updateUser(row.id, { is_admin: true })" :disabled="!!working" :loading="!!working"></UButton>
+          <UButton class="w-30" v-else variant="ghost" color="lime" icon="i-mdi-account-tie-voice"
+            :label="$t('users.assign_admin')" @click="updateUser(row.id, { is_admin: true })" :disabled="!!working"
+            :loading="!!working"></UButton>
         </template>
 
-        <UButton class="ms-2 w-32" v-if="row.is_blocked" variant="ghost" color="lime" icon="i-mdi-account-check"
-          label="Enable" @click="updateUser(row.id, { is_blocked: false })" :disabled="!!working" :loading="!!working">
+        <UButton class="ms-2 w-20" v-if="row.is_blocked" variant="ghost" color="lime" icon="i-mdi-account-check"
+          :label="$t('users.enable')" @click="updateUser(row.id, { is_blocked: false })" :disabled="!!working"
+          :loading="!!working">
         </UButton>
-        <UButton class="ms-2 w-32" v-else variant="ghost" color="red" icon="i-mdi-account-cancel" label="Disable"
-          @click="updateUser(row.id, { is_blocked: true })" :disabled="!!working" :loading="!!working"></UButton>
+        <UButton class="ms-2 w-20" v-else variant="ghost" color="red" icon="i-mdi-account-cancel"
+          :label="$t('users.disable')" @click="updateUser(row.id, { is_blocked: true })" :disabled="!!working"
+          :loading="!!working"></UButton>
       </template>
     </UTable>
   </SkeletonDashboard>
