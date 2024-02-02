@@ -41,25 +41,22 @@ if (currentUser.value.user && currentUser.value.token) {
 <template>
   <div class="absolute top-0 left-0 w-full h-full flex flex-col justify-center items-center">
     <div class="mb-12 text-center">
-      <div class="font-semibold font-mono text-4xl mb-6">Bunker System</div>
-      <UButton size="sm" icon="i-simple-icons-github" variant="link" to="https://github.com/yankeguo/bunker"
-        target="_blank" label="yankeguo/bunker"></UButton>
+      <div class="font-semibold text-4xl mb-6">Bunker System</div>
     </div>
 
     <UCard class="w-80">
       <UForm :validate="validate" :state="state" class="space-y-4" @submit="onSubmit">
-        <UFormGroup label="Username" name="username">
+        <UFormGroup :label="$t('common.username')" name="username">
           <UInput v-model="state.username" />
         </UFormGroup>
 
-        <UFormGroup label="Password" name="password">
+        <UFormGroup :label="$t('common.password')" name="password">
           <UInput v-model="state.password" type="password" />
         </UFormGroup>
 
-        <UButton type="submit" icon="i-mdi-login" :disabled="!!working" :loading="!!working">Sign In</UButton>
+        <UButton type="submit" icon="i-mdi-login" :disabled="!!working" :loading="!!working"
+          :label="$t('common.sign_in')"></UButton>
       </UForm>
     </UCard>
-
-    <div class="h-64"></div>
   </div>
 </template>

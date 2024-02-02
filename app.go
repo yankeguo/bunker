@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"sort"
 	"time"
 
+	"github.com/git-lfs/wildmatch"
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/bunker/model/dao"
 	"github.com/yankeguo/halt"
@@ -403,10 +405,57 @@ func (a *App) routeDeleteGrant(c ufx.Context) {
 	c.JSON(map[string]any{})
 }
 
+func (a *App) routeGrantedItems(c ufx.Context) {
+	_, u := a.requireUser(c)
+
+	db := dao.Use(a.db)
+
+	grants := rg.Must(db.Grant.Where(db.Grant.UserID.Eq(u.ID)).Find())
+
+	servers := rg.Must(db.Server.Find())
+
+	type grantedItem struct {
+		ServerUser string `json:"server_user"`
+		ServerID   string `json:"server_id"`
+	}
+
+	m := map[string][]string{}
+
+	for _, grant := range grants {
+		matcher := wildmatch.NewWildmatch(
+			grant.ServerID,
+			wildmatch.Basename,
+			wildmatch.CaseFold,
+		)
+
+		for _, server := range servers {
+			if matcher.Match(server.ID) {
+				m[server.ID] = append(m[server.ID], grant.ServerUser)
+			}
+		}
+	}
+
+	var grantedItems []grantedItem
+
+	for serverID, serverUsers := range m {
+		grantedItems = append(grantedItems, grantedItem{
+			ServerID:   serverID,
+			ServerUser: serverUsers[0],
+		})
+	}
+
+	sort.SliceStable(grantedItems, func(i, j int) bool {
+		return grantedItems[i].ServerID < grantedItems[j].ServerID
+	})
+
+	c.JSON(map[string]any{"granted_items": grantedItems})
+}
+
 func InstallAppToRouter(a *App, ur ufx.Router) {
-	ur.HandleFunc("/backend/current_user", a.routeCurrentUser)
 	ur.HandleFunc("/backend/sign_in", a.routeSignIn)
 	ur.HandleFunc("/backend/sign_out", a.routeSignOut)
+	ur.HandleFunc("/backend/current_user", a.routeCurrentUser)
+	ur.HandleFunc("/backend/granted_items", a.routeGrantedItems)
 	ur.HandleFunc("/backend/keys", a.routeListKeys)
 	ur.HandleFunc("/backend/keys/create", a.routeCreateKey)
 	ur.HandleFunc("/backend/keys/delete", a.routeDeleteKey)

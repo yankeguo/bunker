@@ -82,25 +82,26 @@ async function deleteServer(id: string) {
 </script>
 
 <template>
-  <SkeletonDashboard title-name="Servers" title-icon="i-mdi-server">
+  <SkeletonDashboard :title-name="$t('servers.title')" title-icon="i-mdi-server">
     <template #left>
       <UCard :ui="uiCard">
         <template #header>
           <div class="flex flex-row items-center">
             <UIcon name="i-mdi-server-plus" class="me-1"></UIcon>
-            <span>Add / Update Server</span>
+            <span>{{ $t('servers.add_update_server') }}</span>
           </div>
         </template>
         <UForm :validate="validate" :state="state" class="space-y-4" @submit="onSubmit">
-          <UFormGroup label="Name" name="id">
+          <UFormGroup :label="$t('common.server_id')" name="id">
             <UInput v-model="state.id" placeholder="Input server name" />
           </UFormGroup>
 
-          <UFormGroup label="Address" name="address">
+          <UFormGroup :label="$t('common.server_address')" name="address">
             <UInput v-model="state.address" placeholder="Input server address" />
           </UFormGroup>
 
-          <UButton type="submit" icon="i-mdi-check-circle" label="Submit" :loading="!!working" :disabled="!!working">
+          <UButton type="submit" icon="i-mdi-check-circle" :label="$t('common.submit')" :loading="!!working"
+            :disabled="!!working">
           </UButton>
         </UForm>
       </UCard>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const { $t } = useNuxtApp()
 const props = defineProps<{
   titleName: string;
   titleIcon: string;
@@ -11,14 +12,14 @@ const { data: user } = await useCurrentUser();
 const links = [
   [
     {
-      label: "Dashboard",
+      label: $t("dashboard.title"),
       icon: "i-mdi-view-dashboard",
       to: { name: "dashboard" },
     },
     ...(user.value.user?.is_admin
       ? [
         {
-          label: "Servers",
+          label: $t("servers.title"),
           icon: "i-mdi-server",
           to: { name: "dashboard-servers" },
         },

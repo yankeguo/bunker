@@ -14,7 +14,7 @@ export const useCurrentUser = async () => {
 
 export const useUsers = () => {
   return useAsyncData<{ users: BUser[] }>(
-    "servers",
+    "users",
     () => $fetch("/backend/users"),
     {
       default() {

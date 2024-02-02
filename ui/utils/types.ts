@@ -33,3 +33,7 @@ export interface BGrant {
   server_id: string;
   created_at: string;
 }
+export interface BGrantedItem {
+  server_user: string;
+  server_id: string;
+}
