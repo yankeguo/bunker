@@ -24,18 +24,27 @@ import (
 
 type App struct {
 	db *gorm.DB
+
+	uiOpts uiOptions
+}
+
+type uiOptions struct {
+	SSHHost string `json:"ssh_host"`
+	SSHPort int    `json:"ssh_port"`
 }
 
 type AppOptions struct {
 	fx.In
 
-	DB *gorm.DB
+	DB   *gorm.DB
+	Conf ufx.Conf
 }
 
 func CreateApp(opts AppOptions) (app *App, err error) {
 	app = &App{
 		db: opts.DB,
 	}
+	err = opts.Conf.Bind(&app.uiOpts, "ui")
 	return
 }
 
@@ -66,6 +75,10 @@ func (a *App) currentUser(c ufx.Context) (token *model.Token, user *model.User, 
 	}
 
 	return
+}
+
+func (a *App) routeUIOptions(c ufx.Context) {
+	c.JSON(a.uiOpts)
 }
 
 func (a *App) routeCurrentUser(c ufx.Context) {
@@ -482,6 +495,7 @@ func (a *App) routeUpdatePassword(c ufx.Context) {
 }
 
 func InstallAppToRouter(a *App, ur ufx.Router) {
+	ur.HandleFunc("/backend/ui_options", a.routeUIOptions)
 	ur.HandleFunc("/backend/sign_in", a.routeSignIn)
 	ur.HandleFunc("/backend/sign_out", a.routeSignOut)
 	ur.HandleFunc("/backend/update_password", a.routeUpdatePassword)
