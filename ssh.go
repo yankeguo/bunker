@@ -104,9 +104,9 @@ func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey)
 
 	// find key and user
 	var key *model.Key
-	if key, err = db.Key.Where(dao.Key.ID.Eq(
-		strings.ToLower(ssh.FingerprintSHA256(_key)),
-	)).Preload(dao.Key.User).First(); err != nil {
+	if key, err = db.Key.Where(db.Key.ID.Eq(
+		ssh.FingerprintSHA256(_key),
+	)).Preload(db.Key.User).First(); err != nil {
 		return nil, err
 	}
 
@@ -133,13 +133,13 @@ func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey)
 	)
 
 	var server *model.Server
-	if server, err = db.Server.Where(dao.Server.ID.Eq(serverID)).First(); err != nil {
+	if server, err = db.Server.Where(db.Server.ID.Eq(serverID)).First(); err != nil {
 		return
 	}
 
 	// find grants
 	var grants = []*model.Grant{}
-	if grants, err = db.Grant.Where(dao.Grant.UserID.Eq(key.User.ID)).Find(); err != nil {
+	if grants, err = db.Grant.Where(db.Grant.UserID.Eq(key.User.ID)).Find(); err != nil {
 		return
 	}
 
@@ -213,16 +213,9 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 		serverAddress = userConn.Permissions.Extensions[sshExtKeyServerAddress]
 	)
 
-	var client *ssh.Client
-	if client, err = ssh.Dial("tcp", serverAddress, &ssh.ClientConfig{
-		User: serverUser,
-		Auth: []ssh.AuthMethod{
-			ssh.PublicKeys(s.signers.Client...),
-		},
-	}); err != nil {
-		return
+	if _, port, _ := net.SplitHostPort(serverAddress); port == "" {
+		serverAddress = net.JoinHostPort(serverAddress, "22")
 	}
-	defer client.Close()
 
 	log := s.loggers.With(
 		"remote_addr", conn.RemoteAddr().String(),
@@ -231,6 +224,19 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 		"server_id", userConn.Permissions.Extensions[sshExtKeyServerID],
 		"session_id", hex.EncodeToString(userConn.SessionID()),
 	)
+
+	var client *ssh.Client
+	if client, err = ssh.Dial("tcp", serverAddress, &ssh.ClientConfig{
+		User: serverUser,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(s.signers.Client...),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}); err != nil {
+		log.With("error", err).Error("ssh dial")
+		return
+	}
+	defer client.Close()
 
 	PipeSSH(log, client, userConn, chUserNewChannel, chUserRequest)
 }
@@ -270,11 +276,11 @@ func (s *SSHServer) Shutdown(ctx context.Context) (err error) {
 }
 
 func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-chan ssh.NewChannel, chUserRequest <-chan *ssh.Request) {
-	// 'user' stands for the user side
-	// 'target' stands for the target server side
-
+	// handle user request for new channel
 	handleUserNewChannel := func(wg *sync.WaitGroup, userNewChannel ssh.NewChannel) {
 		defer wg.Done()
+
+		log := log.With("channel_type", userNewChannel.ChannelType())
 
 		// create target channel and target request channel
 		targetChannel, chTargetRequest, err1 := target.OpenChannel(userNewChannel.ChannelType(), userNewChannel.ExtraData())
@@ -287,6 +293,7 @@ func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerCon
 			}
 			return
 		}
+		defer log.Info("channel end")
 		defer targetChannel.Close()
 
 		userChannel, chUserRequest, err1 := userNewChannel.Accept()
@@ -300,18 +307,23 @@ func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerCon
 		wg1.Add(1)
 		go func() {
 			defer wg1.Done()
+			defer log.Info("channel pipe end: from target")
+			defer userChannel.Close()
 			io.Copy(userChannel, targetChannel)
 		}()
 
 		wg1.Add(1)
 		go func() {
 			defer wg1.Done()
+			defer log.Info("channel pipe end: from user")
+			defer targetChannel.Close()
 			io.Copy(targetChannel, userChannel)
 		}()
 
 		wg1.Add(1)
 		go func() {
 			defer wg1.Done()
+			defer log.Info("channel request end: from target")
 			for targetRequest := range chTargetRequest {
 				ok, err2 := userChannel.SendRequest(targetRequest.Type, targetRequest.WantReply, targetRequest.Payload)
 				if targetRequest.WantReply {
@@ -326,6 +338,7 @@ func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerCon
 		wg1.Add(1)
 		go func() {
 			defer wg1.Done()
+			defer log.Info("channel request end: from user")
 			for userRequest := range chUserRequest {
 				ok, err2 := targetChannel.SendRequest(userRequest.Type, userRequest.WantReply, userRequest.Payload)
 				if userRequest.WantReply {
@@ -343,6 +356,8 @@ func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerCon
 	handleUserRequest := func(wg *sync.WaitGroup, userRequest *ssh.Request) {
 		defer wg.Done()
 
+		log.With("request_type", userRequest.Type).Info("user global request")
+
 		ok, buf, err1 := target.SendRequest(userRequest.Type, userRequest.WantReply, userRequest.Payload)
 		if userRequest.WantReply {
 			userRequest.Reply(ok, buf)
@@ -357,6 +372,7 @@ func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerCon
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer log.Info("user new chan end")
 
 		wg1 := &sync.WaitGroup{}
 		for userNewChannel := range chUserNewChannel {
@@ -369,6 +385,7 @@ func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerCon
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer log.Info("user request end")
 
 		wg1 := &sync.WaitGroup{}
 		for userRequest := range chUserRequest {
