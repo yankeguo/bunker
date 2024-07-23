@@ -175,7 +175,7 @@ func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey)
 }
 
 func (s *SSHServer) BannerCallback(conn ssh.ConnMetadata) string {
-	return "[bunker] "
+	return "[bunker] welcome " + conn.User() + " from " + conn.RemoteAddr().String() + ", session: " + hex.EncodeToString(conn.SessionID())
 }
 
 func (s *SSHServer) createServerConfig() *ssh.ServerConfig {
@@ -234,9 +234,25 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}); err != nil {
 		log.With("error", err).Error("ssh dial")
+		go func() {
+			for nc := range chUserNewChannel {
+				//discard all new channels
+				nc.Reject(ssh.ConnectionFailed, err.Error())
+			}
+		}()
+		go func() {
+			for req := range chUserRequest {
+				//discard all requests
+				if req.WantReply {
+					req.Reply(false, nil)
+				}
+			}
+		}()
 		return
 	}
 	defer client.Close()
+
+	log.Info("ssh connection established")
 
 	PipeSSH(log, client, userConn, chUserNewChannel, chUserRequest)
 }
