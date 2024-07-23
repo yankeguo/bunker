@@ -84,7 +84,8 @@ async function deleteGrant({ id, server_user, server_id }: { id: string; server_
 </script>
 
 <template>
-    <SkeletonDashboard :title-name="$t('grants.title') + ' - ' + $route.params.user_id" title-icon="i-mdi-server-shield">
+    <SkeletonDashboard :title-name="$t('grants.title') + ' - ' + $route.params.user_id"
+        title-icon="i-mdi-server-shield">
         <template #left>
             <UCard :ui="uiCard">
                 <template #header>
@@ -99,7 +100,7 @@ async function deleteGrant({ id, server_user, server_id }: { id: string; server_
                     </UFormGroup>
 
                     <UFormGroup :label="$t('common.server_id')" name="server_id">
-                        <UInput v-model="state.server_id" type="password" />
+                        <UInput v-model="state.server_id" />
                     </UFormGroup>
 
                     <UButton type="submit" icon="i-mdi-check-circle" :label="$t('common.submit')" :loading="!!working"

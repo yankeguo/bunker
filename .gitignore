@@ -25,7 +25,7 @@ go.work
 /cmd/bunker/__debug*
 
 # Data
-/bunker.yaml
+/config.yaml
 /database.sqlite3
 /users.yaml
 /ssh_host_*_key
