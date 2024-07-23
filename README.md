@@ -39,6 +39,9 @@ password: guest
 Prepare a `bunker.yaml` file
 
 ```yaml
+ui: # for display only
+  ssh_host: 'my.fancy.domain'
+  ssh_port: '8022'
 server:
   listen: ":8080"
 ssh_server:
