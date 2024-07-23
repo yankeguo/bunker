@@ -41,7 +41,7 @@ func main() {
 			return &fxevent.ZapLogger{Logger: log}
 		}),
 
-		ufx.ProvideConfFromYAMLFile(filepath.Join(optDataDir, "bunker.yaml")),
+		ufx.ProvideConfFromYAMLFile(filepath.Join(optDataDir, "config.yaml")),
 		ufx.Module,
 
 		fx.Provide(
