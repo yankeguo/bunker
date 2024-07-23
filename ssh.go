@@ -63,6 +63,7 @@ func CreateSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 		listen:  p.Listen,
 		signers: opts.Signers,
 		loggers: opts.Logger,
+		db:      opts.DB,
 	}
 
 	if opts.Lifecycle != nil {
