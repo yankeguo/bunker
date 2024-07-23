@@ -441,7 +441,7 @@ func (a *App) routeGrantedItems(c ufx.Context) {
 		}
 	}
 
-	var grantedItems []grantedItem
+	grantedItems := []grantedItem{}
 
 	for serverID, serverUsers := range m {
 		grantedItems = append(grantedItems, grantedItem{

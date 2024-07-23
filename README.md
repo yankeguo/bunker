@@ -36,6 +36,8 @@ password: guest
 
 ## Configuration File
 
+Prepare a `bunker.yaml` file
+
 ```yaml
 server:
   listen: ":8080"
