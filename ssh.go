@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -175,7 +176,12 @@ func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey)
 }
 
 func (s *SSHServer) BannerCallback(conn ssh.ConnMetadata) string {
-	return "[bunker] welcome " + conn.User() + " from " + conn.RemoteAddr().String() + ", session: " + hex.EncodeToString(conn.SessionID())
+	return fmt.Sprintf(
+		"bunker: welcome user %s from %s, session: %s\n",
+		conn.User(),
+		conn.RemoteAddr().String(),
+		hex.EncodeToString(conn.SessionID()),
+	)
 }
 
 func (s *SSHServer) createServerConfig() *ssh.ServerConfig {
