@@ -8,7 +8,7 @@ definePageMeta({
     middleware: ["auth"],
 })
 
-const { data: grants, refresh: refreshGrants } = await useGrants(useRoute().params.user_id as string);
+const { data: grants, refresh: refreshGrants } = await useGrants(useRoute().query.user_id as string);
 
 const columns = [
     {
@@ -53,7 +53,7 @@ async function onSubmit(event: FormSubmitEvent<any>) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(Object.assign({ user_id: useRoute().params.user_id }, event.data))
+            body: JSON.stringify(Object.assign({ user_id: useRoute().query.user_id }, event.data))
         })
 
         await refreshGrants()

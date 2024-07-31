@@ -119,7 +119,7 @@ async function updateUser(id: string, { is_admin, is_blocked }: { is_admin?: boo
     <UTable :rows="users.users" :columns="columns">
       <template #id-data="{ row }">
         <UButton class="font-semibold" variant="link"
-          :to="{ name: 'dashboard-users-user_id', params: { user_id: row.id } }" :label="row.id">
+          :to="{ name: 'dashboard-users-detail', query: { user_id: row.id } }" :label="row.id">
         </UButton>
       </template>
       <template #role-data="{ row }">
