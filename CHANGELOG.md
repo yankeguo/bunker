@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.1.1 - 2024-08-05
+#### Bug Fixes
+- change url for user detail for nuxt static serving - (80ee6d8) - GUO YANKE
+#### Build system
+- update Dockerfile - (bbcc116) - GUO YANKE
+
+- - -
+
 ## v0.1.0 - 2024-07-31
 #### Bug Fixes
 - **(ssh-server)** discard new channel and user request on error - (63f6685) - GUO YANKE
