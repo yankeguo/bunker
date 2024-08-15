@@ -18,7 +18,7 @@ Static assets are embedded in the binary, so you don't need to download anything
 Visit [DockerHub Repository](https://hub.docker.com/repository/docker/yankeguo/bunker) or [GitHub Packages](https://github.com/yankeguo?tab=packages&repo_name=bunker) for container images
 
 - Prepare a `data` directory and put `config.yaml` configuration file in it
-- Run contaienr image with `/data` mounted, `docker run -p 8080:8080 -p 8022:8022 -v $PWD/data:/data yankeguo/bunker:latest`
+- Run container image with `/data` mounted, `docker run -p 8080:8080 -p 8022:8022 -v $PWD/data:/data yankeguo/bunker:latest`
 
 ## Initial Users
 
@@ -40,8 +40,8 @@ Prepare a `config.yaml` file
 
 ```yaml
 ui: # for display only
-  ssh_host: 'my.fancy.domain'
-  ssh_port: '8022'
+  ssh_host: "my.fancy.domain"
+  ssh_port: "8022"
 server:
   listen: ":8080"
 ssh_server:
