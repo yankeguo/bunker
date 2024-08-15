@@ -2,6 +2,8 @@
 
 A simple bastion system for linux hosts
 
+[中文文档](README.zh.md)
+
 ## Installation
 
 ### From Binary
