@@ -13,7 +13,7 @@
     "@vueuse/components": "^12.4.0",
     "@vueuse/core": "^12.4.0",
     "@vueuse/nuxt": "^12.4.0",
-    "nuxt": "^3.15.2",
+    "nuxt": "^3.16.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
