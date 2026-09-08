@@ -69,11 +69,6 @@ const en = {
     repeat_password: 'Repeat Password',
     input_repeat_password: 'Input repeat password here',
   },
-  lastwill: "Alive?",
-  pronouns: "him",
-  donation: "donation",
-  copyright: "All Rights Reserved",
-  location: "Shenzhen, China",
 };
 
 const zh: typeof en = {
@@ -143,11 +138,6 @@ const zh: typeof en = {
     repeat_password: '重复密码',
     input_repeat_password: '在此输入重复密码',
   },
-  lastwill: "存活?",
-  pronouns: "他",
-  location: "深圳，中国",
-  donation: "赞助",
-  copyright: "保留所有权利",
 };
 
 const i18nData: {
@@ -213,12 +203,9 @@ export default defineNuxtPlugin((nuxtApp) => {
     lang = i18nData.langs[0];
   }
 
-  let langName = i18nData.langNames[lang];
-
   return {
     provide: {
       lang,
-      langName,
       langs: i18nData.langs,
       langNames: i18nData.langNames,
       t: (key: string): string => {

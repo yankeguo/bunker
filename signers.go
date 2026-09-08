@@ -19,20 +19,32 @@ import (
 
 type SSHPrivateKeyGenerator = func() (key crypto.PrivateKey, err error)
 
-var (
-	sshPrivateKeyGenerators = map[string]SSHPrivateKeyGenerator{
-		"rsa": func() (crypto.PrivateKey, error) {
-			return rsa.GenerateKey(rand.Reader, 2048)
-		},
-		"ecdsa": func() (crypto.PrivateKey, error) {
-			return ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-		},
-		"ed25519": func() (crypto.PrivateKey, error) {
+// sshPrivateKeyGenerators is ordered, so generated host keys and
+// authorized_keys stay stable across restarts
+var sshPrivateKeyGenerators = []struct {
+	kind     string
+	generate SSHPrivateKeyGenerator
+}{
+	{
+		kind: "ed25519",
+		generate: func() (crypto.PrivateKey, error) {
 			_, priv, err := ed25519.GenerateKey(rand.Reader)
 			return priv, err
 		},
-	}
-)
+	},
+	{
+		kind: "ecdsa",
+		generate: func() (crypto.PrivateKey, error) {
+			return ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+		},
+	},
+	{
+		kind: "rsa",
+		generate: func() (crypto.PrivateKey, error) {
+			return rsa.GenerateKey(rand.Reader, 2048)
+		},
+	},
+}
 
 type Signers struct {
 	Host   []ssh.Signer
@@ -93,18 +105,20 @@ func CreateSigners(log *zap.SugaredLogger, dir DataDir) (signers *Signers, err e
 			prefix: "ssh_client_",
 		},
 	} {
-		for kind, generator := range sshPrivateKeyGenerators {
+		for _, generator := range sshPrivateKeyGenerators {
 			var sgn ssh.Signer
-			if sgn, err = loadOrCreateSigner(log, filepath.Join(dir.String(), item.prefix+kind+"_key"), generator); err != nil {
+			if sgn, err = loadOrCreateSigner(log, filepath.Join(dir.String(), item.prefix+generator.kind+"_key"), generator.generate); err != nil {
 				return
 			}
 			*item.output = append(*item.output, sgn)
 		}
 	}
 
+	var buf strings.Builder
 	for _, sgn := range signers.Client {
-		signers.AuthorizedKeys += string(ssh.MarshalAuthorizedKey(sgn.PublicKey()))
+		buf.Write(ssh.MarshalAuthorizedKey(sgn.PublicKey()))
 	}
+	signers.AuthorizedKeys = buf.String()
 
 	log.Info("\n------- Client Public Keys -------\n" + strings.TrimSpace(signers.AuthorizedKeys) + "\n----------------------------------")
 

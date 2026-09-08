@@ -8,7 +8,14 @@ definePageMeta({
     middleware: ["auth"],
 })
 
-const { data: grants, refresh: refreshGrants } = await useGrants(useRoute().query.user_id as string);
+const route = useRoute();
+const userId = route.query.user_id as string;
+
+if (!userId) {
+    navigateTo({ name: "dashboard-users" });
+}
+
+const { data: grants, refresh: refreshGrants } = await useGrants(userId);
 
 const columns = [
     {
@@ -53,7 +60,7 @@ async function onSubmit(event: FormSubmitEvent<any>) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(Object.assign({ user_id: useRoute().query.user_id }, event.data))
+            body: JSON.stringify(Object.assign({ user_id: userId }, event.data))
         })
 
         await refreshGrants()
@@ -62,7 +69,7 @@ async function onSubmit(event: FormSubmitEvent<any>) {
 }
 
 async function deleteGrant({ id, server_user, server_id }: { id: string; server_user: string; server_id: string }) {
-    if (!confirm(`confirm to to delete grant to ${server_user}@${server_id}?`)) {
+    if (!confirm(`Confirm to delete grant to ${server_user}@${server_id}?`)) {
         return
     }
 
@@ -84,8 +91,7 @@ async function deleteGrant({ id, server_user, server_id }: { id: string; server_
 </script>
 
 <template>
-    <SkeletonDashboard :title-name="$t('grants.title') + ' - ' + $route.params.user_id"
-        title-icon="i-mdi-server-shield">
+    <SkeletonDashboard :title-name="$t('grants.title') + ' - ' + userId" title-icon="i-mdi-server-shield">
         <template #left>
             <UCard :ui="uiCard">
                 <template #header>

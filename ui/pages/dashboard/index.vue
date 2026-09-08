@@ -10,7 +10,7 @@ definePageMeta({
 
 const { data: items, refresh: refreshItems } = await useGrantedItems();
 
-const { data: uiOptions, refresh: refreshUIOptions } = await useUIOptions();
+const { data: uiOptions } = await useUIOptions();
 
 const addressHint = computed(() => {
   if (uiOptions.value.ssh_host) {

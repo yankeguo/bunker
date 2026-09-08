@@ -29,7 +29,7 @@ async function doSignOut() {
   if (!confirm("Are you sure to sign out?")) {
     return;
   }
-  await $fetch("/backend/sign_out");
+  await $fetch("/backend/sign_out", { method: "POST" });
   navigateTo({ name: "index" });
 }
 

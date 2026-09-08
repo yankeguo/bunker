@@ -58,19 +58,17 @@ async function onSubmit(event: FormSubmitEvent<any>) {
 }
 
 async function updateUser(id: string, { is_admin, is_blocked }: { is_admin?: boolean, is_blocked?: boolean }) {
-  let message = 'Confirm to ';
+  const actions = [];
 
   if (typeof is_admin === 'boolean') {
-    message += is_admin ? 'set admin' : 'unset admin'
+    actions.push(is_admin ? 'set admin' : 'unset admin')
   }
 
   if (typeof is_blocked === 'boolean') {
-    message += is_blocked ? 'block' : 'unblock'
+    actions.push(is_blocked ? 'block' : 'unblock')
   }
 
-  message += ` for user ${id}?`
-
-  if (!confirm(message)) {
+  if (!confirm(`Confirm to ${actions.join(' and ')} for user ${id}?`)) {
     return
   }
 

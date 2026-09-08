@@ -26,7 +26,7 @@ async function onSubmit(event: FormSubmitEvent<any>) {
       body: JSON.stringify(event.data),
     });
     await refreshCurrentUser();
-    navigateTo({ name: "dashboard" });
+    await navigateTo({ name: "dashboard" });
   })
 }
 

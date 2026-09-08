@@ -16,7 +16,9 @@ var _debug map[string]bool
 func init() {
 	_debug = make(map[string]bool)
 	for _, v := range strings.Split(os.Getenv("DEBUG"), ",") {
-		_debug[strings.TrimSpace(v)] = true
+		if v = strings.TrimSpace(v); v != "" {
+			_debug[v] = true
+		}
 	}
 }
 

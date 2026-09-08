@@ -43,7 +43,12 @@ func (u *User) SetPassword(p string) (err error) {
 	return
 }
 
+// CheckPasswordDigest check a plain password against a bcrypt digest
+func CheckPasswordDigest(digest, password string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(digest), []byte(password)) == nil
+}
+
 // CheckPassword check password
 func (u *User) CheckPassword(p string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(u.PasswordDigest), []byte(p)) == nil
+	return CheckPasswordDigest(u.PasswordDigest, p)
 }

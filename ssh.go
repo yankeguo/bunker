@@ -29,11 +29,12 @@ const (
 )
 
 type SSHServer struct {
-	dataDir  string
-	listen   string
-	db       *gorm.DB
-	signers  *Signers
-	loggers  *zap.SugaredLogger
+	listen  string
+	db      *gorm.DB
+	signers *Signers
+	loggers *zap.SugaredLogger
+
+	mu       sync.Mutex
 	listener *net.TCPListener
 }
 
@@ -46,7 +47,6 @@ type SSHServerOptions struct {
 
 	Lifecycle fx.Lifecycle
 	Conf      ufx.Conf
-	DataDir   DataDir
 	DB        *gorm.DB
 	Signers   *Signers
 	Logger    *zap.SugaredLogger
@@ -60,7 +60,6 @@ func CreateSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 	}
 
 	s = &SSHServer{
-		dataDir: opts.DataDir.String(),
 		listen:  p.Listen,
 		signers: opts.Signers,
 		loggers: opts.Logger,
@@ -84,7 +83,6 @@ func CreateSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 				}
 			},
 			OnStop: func(ctx context.Context) error {
-				time.Sleep(time.Second * 3)
 				return s.Shutdown(ctx)
 			},
 		})
@@ -93,11 +91,17 @@ func CreateSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 }
 
 func (s *SSHServer) AuthLogCallback(conn ssh.ConnMetadata, method string, err error) {
-	s.loggers.With(
+	log := s.loggers.With(
 		"remote_addr", conn.RemoteAddr().String(),
+		"user", conn.User(),
 		"method", method,
-		"error", err,
-	).Info("ssh auth")
+	)
+
+	if err != nil {
+		log.With("error", err).Info("ssh auth failed")
+	} else {
+		log.Info("ssh auth succeeded")
+	}
 }
 
 func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey) (perm *ssh.Permissions, err error) {
@@ -198,6 +202,36 @@ func (s *SSHServer) createServerConfig() *ssh.ServerConfig {
 	return cfg
 }
 
+const (
+	sshDialTimeout      = time.Second * 15
+	sshHandshakeTimeout = time.Second * 15
+)
+
+func dialSSHServer(address string, config *ssh.ClientConfig) (client *ssh.Client, err error) {
+	var conn net.Conn
+	if conn, err = (&net.Dialer{Timeout: sshDialTimeout}).Dial("tcp", address); err != nil {
+		return
+	}
+
+	_ = conn.SetDeadline(time.Now().Add(sshHandshakeTimeout))
+
+	var (
+		clientConn ssh.Conn
+		channels   <-chan ssh.NewChannel
+		requests   <-chan *ssh.Request
+	)
+
+	if clientConn, channels, requests, err = ssh.NewClientConn(conn, address, config); err != nil {
+		_ = conn.Close()
+		return
+	}
+
+	_ = conn.SetDeadline(time.Time{})
+
+	client = ssh.NewClient(clientConn, channels, requests)
+	return
+}
+
 func (s *SSHServer) HandleServerConn(conn net.Conn) {
 	defer conn.Close()
 
@@ -232,23 +266,24 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 	)
 
 	var client *ssh.Client
-	if client, err = ssh.Dial("tcp", serverAddress, &ssh.ClientConfig{
+	if client, err = dialSSHServer(serverAddress, &ssh.ClientConfig{
 		User: serverUser,
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(s.signers.Client...),
 		},
+		// target servers are registered by admins, their host keys are not known in advance
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}); err != nil {
 		log.With("error", err).Error("ssh dial")
 		go func() {
 			for nc := range chUserNewChannel {
-				//discard all new channels
+				// discard all new channels
 				nc.Reject(ssh.ConnectionFailed, err.Error())
 			}
 		}()
 		go func() {
 			for req := range chUserRequest {
-				//discard all requests
+				// discard all requests
 				if req.WantReply {
 					req.Reply(false, nil)
 				}
@@ -264,24 +299,36 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 }
 
 func (s *SSHServer) ListenAndServe() (err error) {
-	if s.listener != nil {
-		err = errors.New("listener is already initialized")
-		return
-	}
-
 	var addr *net.TCPAddr
 	if addr, err = net.ResolveTCPAddr("tcp", s.listen); err != nil {
 		return
 	}
 
-	if s.listener, err = net.ListenTCP("tcp", addr); err != nil {
+	s.mu.Lock()
+
+	if s.listener != nil {
+		s.mu.Unlock()
+		err = errors.New("listener is already initialized")
 		return
 	}
-	defer s.listener.Close()
+
+	var listener *net.TCPListener
+	if listener, err = net.ListenTCP("tcp", addr); err != nil {
+		s.mu.Unlock()
+		return
+	}
+
+	s.listener = listener
+	s.mu.Unlock()
+
+	defer listener.Close()
 
 	for {
 		var conn net.Conn
-		if conn, err = s.listener.Accept(); err != nil {
+		if conn, err = listener.Accept(); err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				err = nil
+			}
 			return
 		}
 		go s.HandleServerConn(conn)
@@ -289,11 +336,18 @@ func (s *SSHServer) ListenAndServe() (err error) {
 }
 
 func (s *SSHServer) Shutdown(ctx context.Context) (err error) {
-	l := s.listener
-	if l == nil {
+	s.mu.Lock()
+	listener := s.listener
+	s.mu.Unlock()
+
+	if listener == nil {
 		return
 	}
-	err = l.Close()
+
+	if err = listener.Close(); err != nil && errors.Is(err, net.ErrClosed) {
+		err = nil
+	}
+
 	return
 }
 

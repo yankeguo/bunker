@@ -9,5 +9,5 @@ type Grant struct {
 	ServerID   string    `gorm:"column:server_id;index" json:"server_id"`
 	CreatedAt  time.Time `gorm:"column:created_at;index" json:"created_at"`
 
-	User User
+	User User `json:"-"`
 }

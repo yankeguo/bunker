@@ -1,4 +1,4 @@
-export const useCurrentUser = async () => {
+export const useCurrentUser = () => {
   return useAsyncData<{
     user?: BUser;
     token?: BToken;

@@ -21,7 +21,14 @@ func InitializeUsers(
 	dir DataDir,
 	_db *gorm.DB,
 ) (err error) {
-	buf, _ := os.ReadFile(filepath.Join(dir.String(), "users.yaml"))
+	var buf []byte
+	if buf, err = os.ReadFile(filepath.Join(dir.String(), "users.yaml")); err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		}
+		return
+	}
+
 	buf = bytes.TrimSpace(buf)
 	if len(buf) == 0 {
 		return
@@ -44,6 +51,11 @@ func InitializeUsers(
 			break
 		}
 
+		if iu.Username == "" || iu.Password == "" {
+			log.With("username", iu.Username).Warn("skipped initial user with empty username or password")
+			continue
+		}
+
 		var user *model.User
 		if user, err = db.User.Where(db.User.ID.Eq(iu.Username)).First(); err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -54,7 +66,9 @@ func InitializeUsers(
 					VisitedAt: time.Now(),
 					IsAdmin:   iu.IsAdmin,
 				}
-				user.SetPassword(iu.Password)
+				if err = user.SetPassword(iu.Password); err != nil {
+					return
+				}
 
 				if err = db.User.Create(user); err != nil {
 					return
@@ -65,7 +79,9 @@ func InitializeUsers(
 		} else if iu.UpdateExisting {
 			log.With("username", iu.Username).Info("user updated")
 
-			user.SetPassword(iu.Password)
+			if err = user.SetPassword(iu.Password); err != nil {
+				return
+			}
 
 			if _, err = db.User.Where(
 				db.User.ID.Eq(iu.Username),
@@ -86,8 +102,17 @@ func InitializeUsers(
 }
 
 func CreateDatabase(dir DataDir) (db *gorm.DB, err error) {
+	if dir.String() != "" {
+		if err = os.MkdirAll(dir.String(), 0o755); err != nil {
+			return
+		}
+	}
+
+	dsn := "file:" + filepath.Join(dir.String(), "database.sqlite3") +
+		"?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)"
+
 	if db, err = gorm.Open(
-		sqlite.Open(filepath.Join(dir.String(), "database.sqlite3")),
+		sqlite.Open(dsn),
 		&gorm.Config{},
 	); err != nil {
 		return

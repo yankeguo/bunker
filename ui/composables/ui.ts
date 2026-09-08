@@ -11,7 +11,7 @@ export const uiCard = {
 }
 
 export const useUIOptions = () => {
-    return useAsyncData<{ ssh_host?: string; ssh_port?: number }>(
+    return useAsyncData<{ ssh_host?: string; ssh_port?: string }>(
         "ui-options",
         () => $fetch("/backend/ui_options"),
         {

@@ -63,7 +63,7 @@ async function editServer({ id, address }: { id: string, address: string }) {
 }
 
 async function deleteServer(id: string) {
-  if (!confirm(`confirm to to delete server ${id}?`)) {
+  if (!confirm(`Confirm to delete server ${id}?`)) {
     return
   }
 

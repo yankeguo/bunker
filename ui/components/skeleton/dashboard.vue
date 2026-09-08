@@ -1,11 +1,9 @@
 <script setup lang="ts">
 const { $t } = useNuxtApp()
-const props = defineProps<{
+defineProps<{
   titleName: string;
   titleIcon: string;
 }>();
-
-const route = useRoute();
 
 const { data: user } = await useCurrentUser();
 

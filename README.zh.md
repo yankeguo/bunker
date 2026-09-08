@@ -44,6 +44,8 @@ ui: # for display only
   ssh_port: "8022"
 server:
   listen: ":8080"
+  # trust X-Forwarded-For / X-Forwarded-Proto from a front reverse proxy
+  trust_proxy: false
 ssh_server:
   listen: ":8022"
 ```
