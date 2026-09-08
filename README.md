@@ -50,6 +50,23 @@ ssh_server:
   listen: ":8022"
 ```
 
+## Build from Source
+
+Requirements:
+
+- Go (see the `go` directive in `go.mod` for the minimum version)
+- Node.js 20+ and pnpm 10+ (for the web UI)
+
+The web UI assets are embedded into the binary, so the UI must be generated before compiling:
+
+```bash
+cd ui
+pnpm install
+pnpm run generate
+cd ..
+go build -o bunker ./cmd/bunker
+```
+
 ## Credits
 
 GUO YANKE, MIT License

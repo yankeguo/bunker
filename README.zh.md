@@ -48,6 +48,23 @@ ssh_server:
   listen: ":8022"
 ```
 
+## 从源码构建
+
+环境要求：
+
+- Go（最低版本见 `go.mod` 中的 `go` 指令）
+- Node.js 20+ 和 pnpm 10+（用于构建 Web 界面）
+
+Web 界面静态资源会被嵌入到二进制文件中，因此需要先生成 UI 再编译：
+
+```bash
+cd ui
+pnpm install
+pnpm run generate
+cd ..
+go build -o bunker ./cmd/bunker
+```
+
 ## 许可证
 
 GUO YANKE, MIT License
