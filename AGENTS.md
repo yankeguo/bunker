@@ -29,13 +29,13 @@ key and pipes the session to the target server using its own client keys (see
 - `scripts/create-dao/` — regenerates `model/dao` (run `go run ./scripts/create-dao`
   after changing models; it creates a throwaway `database.sqlite3` in the repo root,
   which is gitignored)
-- `ui/` — Nuxt 3 app (`@nuxt/ui` v2, pnpm)
+- `ui/` — Nuxt 3 app (`@nuxt/ui` v2, npm)
 
 ## Build & Test
 
 ```bash
 # UI first (required — static.go embeds ui/.output/public)
-cd ui && pnpm install && pnpm run generate && cd ..
+cd ui && npm ci && npm run generate && cd ..
 
 # Backend
 go build ./...          # or: go build -o bunker ./cmd/bunker
@@ -64,8 +64,8 @@ Docker: `docker build .` — but the UI must be generated into `ui/.output/publi
   replaced.
 - UI dependencies are intentionally kept on their current majors: Nuxt 3 + `@nuxt/ui`
   v2. Upgrading to Nuxt 4 / `@nuxt/ui` v3+ is a breaking rewrite of the components.
-- pnpm 10+ requires build-script approval; `ui/pnpm-workspace.yaml` allows `esbuild`.
-  Don't remove it.
+- npm gates dependency install scripts; `esbuild`'s postinstall is approved via the
+  `allowScripts` field in `ui/package.json`. Don't remove it.
 
 ## Configuration
 

@@ -25,21 +25,17 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org/
-          cache: "pnpm"
-          cache-dependency-path: "ui/pnpm-lock.yaml"
+          cache: "npm"
+          cache-dependency-path: "ui/package-lock.json"
 
-      - run: pnpm install
+      - run: npm ci
         working-directory: ui
 
-      - run: pnpm run generate
+      - run: npm run generate
         working-directory: ui
 
       - name: docker-setup
