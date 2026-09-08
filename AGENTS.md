@@ -89,4 +89,4 @@ are auto-generated into the data dir on first run.
 - Error handling in HTTP handlers uses `rg.Must*` (panic-on-error) and `halt` for
   client errors; keep that style.
 - Database access goes through the generated `dao` package, not raw gorm calls.
-- Conventional commits with `cocogitto` (`cog.toml`); changelog in `CHANGELOG.md`.
+- Use conventional commit messages.
