@@ -2,6 +2,7 @@ package bunker
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/bunker/model/dao"
+	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
@@ -101,7 +103,7 @@ func InitializeUsers(
 	return
 }
 
-func CreateDatabase(dir DataDir) (db *gorm.DB, err error) {
+func CreateDatabase(dir DataDir, lc fx.Lifecycle) (db *gorm.DB, err error) {
 	if dir.String() != "" {
 		if err = os.MkdirAll(dir.String(), 0o755); err != nil {
 			return
@@ -122,6 +124,17 @@ func CreateDatabase(dir DataDir) (db *gorm.DB, err error) {
 	}
 	if Debug("db") {
 		db = db.Debug()
+	}
+	if lc != nil {
+		lc.Append(fx.Hook{
+			OnStop: func(context.Context) error {
+				sqlDB, err := db.DB()
+				if err != nil {
+					return err
+				}
+				return sqlDB.Close()
+			},
+		})
 	}
 	return
 }

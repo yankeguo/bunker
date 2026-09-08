@@ -1,14 +1,11 @@
 <script setup lang="ts">
-import type { FormError, FormSubmitEvent } from "#ui/types";
-import { guardWorking } from "~/composables/error";
-
 const { $t } = useNuxtApp()
 
 definePageMeta({
   middleware: ["auth"],
 });
 
-const { data: items, refresh: refreshItems } = await useGrantedItems();
+const { data: items } = await useGrantedItems();
 
 const { data: uiOptions } = await useUIOptions();
 

@@ -27,7 +27,7 @@ function setLanguage(lang: string) {
     <div class="flex flex-row items-center">
       <ClientOnly>
         <!-- i18n -->
-        <template v-for="(item, idx) in $langs">
+        <template v-for="item in $langs" :key="item">
           <a @click.prevent="setLanguage(item)" :class="{
             'text-sm': true,
             underline: $lang === item,

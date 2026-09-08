@@ -30,6 +30,9 @@ async function doSignOut() {
     return;
   }
   await $fetch("/backend/sign_out", { method: "POST" });
+  // drop the cached current user, otherwise the index page would redirect
+  // straight back to the dashboard
+  clearNuxtData("current-user");
   navigateTo({ name: "index" });
 }
 

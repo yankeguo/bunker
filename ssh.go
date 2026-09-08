@@ -32,7 +32,7 @@ type SSHServer struct {
 	listen  string
 	db      *gorm.DB
 	signers *Signers
-	loggers *zap.SugaredLogger
+	log     *zap.SugaredLogger
 
 	mu       sync.Mutex
 	listener *net.TCPListener
@@ -62,7 +62,7 @@ func CreateSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 	s = &SSHServer{
 		listen:  p.Listen,
 		signers: opts.Signers,
-		loggers: opts.Logger,
+		log:     opts.Logger,
 		db:      opts.DB,
 	}
 
@@ -79,6 +79,12 @@ func CreateSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 				case <-ctx.Done():
 					return s.Shutdown(ctx)
 				case <-time.After(time.Second * 3):
+					// the listener is assumed to be up; log any later failure
+					go func() {
+						if err := <-chErr; err != nil {
+							s.log.With("error", err).Error("ssh server exited")
+						}
+					}()
 					return nil
 				}
 			},
@@ -91,7 +97,7 @@ func CreateSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
 }
 
 func (s *SSHServer) AuthLogCallback(conn ssh.ConnMetadata, method string, err error) {
-	log := s.loggers.With(
+	log := s.log.With(
 		"remote_addr", conn.RemoteAddr().String(),
 		"user", conn.User(),
 		"method", method,
@@ -112,6 +118,9 @@ func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey)
 	if key, err = db.Key.Where(db.Key.ID.Eq(
 		ssh.FingerprintSHA256(_key),
 	)).Preload(db.Key.User).First(); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = errors.New("unknown public key")
+		}
 		return nil, err
 	}
 
@@ -139,6 +148,9 @@ func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey)
 
 	var server *model.Server
 	if server, err = db.Server.Where(db.Server.ID.Eq(serverID)).First(); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = fmt.Errorf("unknown server %q", serverID)
+		}
 		return
 	}
 
@@ -257,7 +269,7 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 		serverAddress = net.JoinHostPort(serverAddress, "22")
 	}
 
-	log := s.loggers.With(
+	log := s.log.With(
 		"remote_addr", conn.RemoteAddr().String(),
 		"server_user", serverUser,
 		"server_address", serverAddress,
@@ -275,20 +287,30 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}); err != nil {
 		log.With("error", err).Error("ssh dial")
+
+		// keep the user connection alive and reject everything until the
+		// user disconnects, so the failure is delivered to the client
+		var wg sync.WaitGroup
+
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for nc := range chUserNewChannel {
-				// discard all new channels
 				nc.Reject(ssh.ConnectionFailed, err.Error())
 			}
 		}()
+
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for req := range chUserRequest {
-				// discard all requests
 				if req.WantReply {
 					req.Reply(false, nil)
 				}
 			}
 		}()
+
+		wg.Wait()
 		return
 	}
 	defer client.Close()

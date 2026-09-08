@@ -16,7 +16,7 @@ export const useUIOptions = () => {
         () => $fetch("/backend/ui_options"),
         {
             default() {
-                return { ssh_host: '', ssh_port: 0 };
+                return { ssh_host: '', ssh_port: '' };
             }
         }
     )

@@ -255,9 +255,8 @@ func (a *App) requireAdmin(c ufx.Context) (token *model.Token, user *model.User)
 
 func (a *App) routeSignIn(c ufx.Context) {
 	var data struct {
-		Username  string `json:"username"`
-		Password  string `json:"password"`
-		UserAgent string `json:"header_user_agent"`
+		Username string `json:"username"`
+		Password string `json:"password"`
 	}
 	c.Bind(&data)
 
@@ -322,7 +321,7 @@ func (a *App) routeSignIn(c ufx.Context) {
 	token := &model.Token{
 		ID:        hex.EncodeToString(id),
 		UserID:    user.ID,
-		UserAgent: data.UserAgent,
+		UserAgent: c.Req().UserAgent(),
 		CreatedAt: now,
 		VisitedAt: now,
 	}
