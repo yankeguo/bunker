@@ -136,11 +136,14 @@ func (k *key) fillFieldMap() {
 
 func (k key) clone(db *gorm.DB) key {
 	k.keyDo.ReplaceConnPool(db.Statement.ConnPool)
+	k.User.db = db.Session(&gorm.Session{Initialized: true})
+	k.User.db.Statement.ConnPool = db.Statement.ConnPool
 	return k
 }
 
 func (k key) replaceDB(db *gorm.DB) key {
 	k.keyDo.ReplaceDB(db)
+	k.User.db = db.Session(&gorm.Session{})
 	return k
 }
 
@@ -196,6 +199,11 @@ func (a keyBelongsToUser) Model(m *model.Key) *keyBelongsToUserTx {
 	return &keyBelongsToUserTx{a.db.Model(m).Association(a.Name())}
 }
 
+func (a keyBelongsToUser) Unscoped() *keyBelongsToUser {
+	a.db = a.db.Unscoped()
+	return &a
+}
+
 type keyBelongsToUserTx struct{ tx *gorm.Association }
 
 func (a keyBelongsToUserTx) Find() (result *model.User, err error) {
@@ -232,6 +240,11 @@ func (a keyBelongsToUserTx) Clear() error {
 
 func (a keyBelongsToUserTx) Count() int64 {
 	return a.tx.Count()
+}
+
+func (a keyBelongsToUserTx) Unscoped() *keyBelongsToUserTx {
+	a.tx = a.tx.Unscoped()
+	return &a
 }
 
 type keyDo struct{ gen.DO }

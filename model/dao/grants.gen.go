@@ -140,11 +140,14 @@ func (g *grant) fillFieldMap() {
 
 func (g grant) clone(db *gorm.DB) grant {
 	g.grantDo.ReplaceConnPool(db.Statement.ConnPool)
+	g.User.db = db.Session(&gorm.Session{Initialized: true})
+	g.User.db.Statement.ConnPool = db.Statement.ConnPool
 	return g
 }
 
 func (g grant) replaceDB(db *gorm.DB) grant {
 	g.grantDo.ReplaceDB(db)
+	g.User.db = db.Session(&gorm.Session{})
 	return g
 }
 
@@ -200,6 +203,11 @@ func (a grantBelongsToUser) Model(m *model.Grant) *grantBelongsToUserTx {
 	return &grantBelongsToUserTx{a.db.Model(m).Association(a.Name())}
 }
 
+func (a grantBelongsToUser) Unscoped() *grantBelongsToUser {
+	a.db = a.db.Unscoped()
+	return &a
+}
+
 type grantBelongsToUserTx struct{ tx *gorm.Association }
 
 func (a grantBelongsToUserTx) Find() (result *model.User, err error) {
@@ -236,6 +244,11 @@ func (a grantBelongsToUserTx) Clear() error {
 
 func (a grantBelongsToUserTx) Count() int64 {
 	return a.tx.Count()
+}
+
+func (a grantBelongsToUserTx) Unscoped() *grantBelongsToUserTx {
+	a.tx = a.tx.Unscoped()
+	return &a
 }
 
 type grantDo struct{ gen.DO }

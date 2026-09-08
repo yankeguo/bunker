@@ -140,11 +140,14 @@ func (t *token) fillFieldMap() {
 
 func (t token) clone(db *gorm.DB) token {
 	t.tokenDo.ReplaceConnPool(db.Statement.ConnPool)
+	t.User.db = db.Session(&gorm.Session{Initialized: true})
+	t.User.db.Statement.ConnPool = db.Statement.ConnPool
 	return t
 }
 
 func (t token) replaceDB(db *gorm.DB) token {
 	t.tokenDo.ReplaceDB(db)
+	t.User.db = db.Session(&gorm.Session{})
 	return t
 }
 
@@ -200,6 +203,11 @@ func (a tokenBelongsToUser) Model(m *model.Token) *tokenBelongsToUserTx {
 	return &tokenBelongsToUserTx{a.db.Model(m).Association(a.Name())}
 }
 
+func (a tokenBelongsToUser) Unscoped() *tokenBelongsToUser {
+	a.db = a.db.Unscoped()
+	return &a
+}
+
 type tokenBelongsToUserTx struct{ tx *gorm.Association }
 
 func (a tokenBelongsToUserTx) Find() (result *model.User, err error) {
@@ -236,6 +244,11 @@ func (a tokenBelongsToUserTx) Clear() error {
 
 func (a tokenBelongsToUserTx) Count() int64 {
 	return a.tx.Count()
+}
+
+func (a tokenBelongsToUserTx) Unscoped() *tokenBelongsToUserTx {
+	a.tx = a.tx.Unscoped()
+	return &a
 }
 
 type tokenDo struct{ gen.DO }

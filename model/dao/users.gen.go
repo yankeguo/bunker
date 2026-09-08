@@ -94,12 +94,22 @@ func newUser(db *gorm.DB, opts ...gen.DOOption) user {
 		db: db.Session(&gorm.Session{}),
 
 		RelationField: field.NewRelation("Grants", "model.Grant"),
+		User: struct {
+			field.RelationField
+		}{
+			RelationField: field.NewRelation("Grants.User", "model.User"),
+		},
 	}
 
 	_user.Tokens = userHasManyTokens{
 		db: db.Session(&gorm.Session{}),
 
 		RelationField: field.NewRelation("Tokens", "model.Token"),
+		User: struct {
+			field.RelationField
+		}{
+			RelationField: field.NewRelation("Tokens.User", "model.User"),
+		},
 	}
 
 	_user.fillFieldMap()
@@ -172,11 +182,20 @@ func (u *user) fillFieldMap() {
 
 func (u user) clone(db *gorm.DB) user {
 	u.userDo.ReplaceConnPool(db.Statement.ConnPool)
+	u.Keys.db = db.Session(&gorm.Session{Initialized: true})
+	u.Keys.db.Statement.ConnPool = db.Statement.ConnPool
+	u.Grants.db = db.Session(&gorm.Session{Initialized: true})
+	u.Grants.db.Statement.ConnPool = db.Statement.ConnPool
+	u.Tokens.db = db.Session(&gorm.Session{Initialized: true})
+	u.Tokens.db.Statement.ConnPool = db.Statement.ConnPool
 	return u
 }
 
 func (u user) replaceDB(db *gorm.DB) user {
 	u.userDo.ReplaceDB(db)
+	u.Keys.db = db.Session(&gorm.Session{})
+	u.Grants.db = db.Session(&gorm.Session{})
+	u.Tokens.db = db.Session(&gorm.Session{})
 	return u
 }
 
@@ -232,6 +251,11 @@ func (a userHasManyKeys) Model(m *model.User) *userHasManyKeysTx {
 	return &userHasManyKeysTx{a.db.Model(m).Association(a.Name())}
 }
 
+func (a userHasManyKeys) Unscoped() *userHasManyKeys {
+	a.db = a.db.Unscoped()
+	return &a
+}
+
 type userHasManyKeysTx struct{ tx *gorm.Association }
 
 func (a userHasManyKeysTx) Find() (result []*model.Key, err error) {
@@ -270,10 +294,19 @@ func (a userHasManyKeysTx) Count() int64 {
 	return a.tx.Count()
 }
 
+func (a userHasManyKeysTx) Unscoped() *userHasManyKeysTx {
+	a.tx = a.tx.Unscoped()
+	return &a
+}
+
 type userHasManyGrants struct {
 	db *gorm.DB
 
 	field.RelationField
+
+	User struct {
+		field.RelationField
+	}
 }
 
 func (a userHasManyGrants) Where(conds ...field.Expr) *userHasManyGrants {
@@ -301,6 +334,11 @@ func (a userHasManyGrants) Session(session *gorm.Session) *userHasManyGrants {
 
 func (a userHasManyGrants) Model(m *model.User) *userHasManyGrantsTx {
 	return &userHasManyGrantsTx{a.db.Model(m).Association(a.Name())}
+}
+
+func (a userHasManyGrants) Unscoped() *userHasManyGrants {
+	a.db = a.db.Unscoped()
+	return &a
 }
 
 type userHasManyGrantsTx struct{ tx *gorm.Association }
@@ -341,10 +379,19 @@ func (a userHasManyGrantsTx) Count() int64 {
 	return a.tx.Count()
 }
 
+func (a userHasManyGrantsTx) Unscoped() *userHasManyGrantsTx {
+	a.tx = a.tx.Unscoped()
+	return &a
+}
+
 type userHasManyTokens struct {
 	db *gorm.DB
 
 	field.RelationField
+
+	User struct {
+		field.RelationField
+	}
 }
 
 func (a userHasManyTokens) Where(conds ...field.Expr) *userHasManyTokens {
@@ -372,6 +419,11 @@ func (a userHasManyTokens) Session(session *gorm.Session) *userHasManyTokens {
 
 func (a userHasManyTokens) Model(m *model.User) *userHasManyTokensTx {
 	return &userHasManyTokensTx{a.db.Model(m).Association(a.Name())}
+}
+
+func (a userHasManyTokens) Unscoped() *userHasManyTokens {
+	a.db = a.db.Unscoped()
+	return &a
 }
 
 type userHasManyTokensTx struct{ tx *gorm.Association }
@@ -410,6 +462,11 @@ func (a userHasManyTokensTx) Clear() error {
 
 func (a userHasManyTokensTx) Count() int64 {
 	return a.tx.Count()
+}
+
+func (a userHasManyTokensTx) Unscoped() *userHasManyTokensTx {
+	a.tx = a.tx.Unscoped()
+	return &a
 }
 
 type userDo struct{ gen.DO }
