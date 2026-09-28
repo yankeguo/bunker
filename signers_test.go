@@ -47,6 +47,14 @@ func TestLoadOrCreateSigner(t *testing.T) {
 	if string(buf) != "not a key" {
 		t.Fatal("corrupt key file was overwritten")
 	}
+
+	missing := filepath.Join(dir, "missing-dir", "ssh_host_ed25519_key")
+	if _, err = loadOrCreateSigner(log, missing, sshPrivateKeyGenerators[0].generate); err == nil {
+		t.Fatal("expected a missing parent directory to fail")
+	}
+	if _, err = os.Stat(missing); !os.IsNotExist(err) {
+		t.Fatalf("stat missing key = %v", err)
+	}
 }
 
 func TestCreateSigners(t *testing.T) {

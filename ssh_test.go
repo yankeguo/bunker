@@ -130,6 +130,115 @@ func TestSSHServerListenAndShutdown(t *testing.T) {
 	}
 }
 
+func TestSSHRejectsExcessChannels(t *testing.T) {
+	db := openTestDB(t)
+	userKey := testSigner(t)
+	clientKey := testSigner(t)
+	insertUser(t, db, "alice", "secret1", false, false)
+	insertKey(t, db, "alice", "laptop", userKey.PublicKey())
+	insertGrant(t, db, "alice", "root", "web-1")
+
+	targetAddr := startHoldingTarget(t, clientKey.PublicKey())
+	insertServer(t, db, "web-1", targetAddr)
+	bunker := startBunkerSSH(t, db, testSigner(t), clientKey)
+	client := dialBunker(t, bunker, userKey, "root@web-1")
+	defer client.Close()
+
+	type heldSession struct {
+		sess  *ssh.Session
+		stdin io.WriteCloser
+	}
+	held := make([]heldSession, 0, maxSSHChannels)
+	for i := 0; i < maxSSHChannels; i++ {
+		sess, err := client.NewSession()
+		if err != nil {
+			t.Fatalf("session %d: %v", i, err)
+		}
+		stdin, err := sess.StdinPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = sess.Start("hold"); err != nil {
+			t.Fatalf("start %d: %v", i, err)
+		}
+		held = append(held, heldSession{sess, stdin})
+	}
+	t.Cleanup(func() {
+		for _, item := range held {
+			_ = item.stdin.Close()
+			_ = item.sess.Close()
+		}
+	})
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := client.NewSession()
+		errCh <- err
+	}()
+	select {
+	case err := <-errCh:
+		if err == nil || !strings.Contains(err.Error(), "too many channels") {
+			t.Fatalf("channel %d error = %v", maxSSHChannels+1, err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("extra channel was not rejected")
+	}
+
+	if err := held[0].stdin.Close(); err != nil {
+		t.Fatal(err)
+	}
+	waitCh := make(chan struct{})
+	go func() {
+		_ = held[0].sess.Wait()
+		close(waitCh)
+	}()
+	select {
+	case <-waitCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("closing stdin did not finish the held session")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var out string
+	var err error
+	for {
+		out, err = runBunkerCommand(client)
+		if err == nil && out == "pong" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("session after releasing a channel = %q %v", out, err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestSSHDialErrorIsReturnedToTheClient(t *testing.T) {
+	db := openTestDB(t)
+	userKey := testSigner(t)
+	insertUser(t, db, "alice", "secret1", false, false)
+	insertKey(t, db, "alice", "laptop", userKey.PublicKey())
+	insertGrant(t, db, "alice", "root", "*")
+	insertServer(t, db, "closed", "127.0.0.1:1")
+	insertServer(t, db, "default-port", "127.0.0.1")
+
+	bunker := startBunkerSSH(t, db, testSigner(t), testSigner(t))
+
+	client := dialBunker(t, bunker, userKey, "root@closed")
+	_, err := runBunkerCommand(client)
+	_ = client.Close()
+	if err == nil || !strings.Contains(err.Error(), "127.0.0.1:1") {
+		t.Fatalf("closed port error = %v", err)
+	}
+
+	client = dialBunker(t, bunker, userKey, "root@default-port")
+	_, err = runBunkerCommand(client)
+	_ = client.Close()
+	if err == nil || !strings.Contains(err.Error(), "127.0.0.1:22") {
+		t.Fatalf("default port error = %v", err)
+	}
+}
+
 func TestSSHSessionProxyPinsHostKey(t *testing.T) {
 	db := openTestDB(t)
 	userKey := testSigner(t)
@@ -221,6 +330,80 @@ func startTargetSSH(t *testing.T, clientKey ssh.PublicKey) (string, ssh.Signer) 
 		}
 	}()
 	return ln.Addr().String(), host
+}
+
+func startHoldingTarget(t *testing.T, clientKey ssh.PublicKey) string {
+	t.Helper()
+	host := testSigner(t)
+	cfg := &ssh.ServerConfig{
+		PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			if conn.User() == "root" && bytes.Equal(key.Marshal(), clientKey.Marshal()) {
+				return &ssh.Permissions{}, nil
+			}
+			return nil, errors.New("denied")
+		},
+	}
+	cfg.AddHostKey(host)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go serveHoldingTarget(conn, cfg)
+		}
+	}()
+	return ln.Addr().String()
+}
+
+func serveHoldingTarget(conn net.Conn, cfg *ssh.ServerConfig) {
+	sc, chans, reqs, err := ssh.NewServerConn(conn, cfg)
+	if err != nil {
+		_ = conn.Close()
+		return
+	}
+	defer sc.Close()
+	go ssh.DiscardRequests(reqs)
+	for ch := range chans {
+		if ch.ChannelType() != "session" {
+			_ = ch.Reject(ssh.UnknownChannelType, "unsupported")
+			continue
+		}
+		channel, requests, err := ch.Accept()
+		if err != nil {
+			continue
+		}
+		go func() {
+			defer channel.Close()
+			stdinDone := make(chan struct{})
+			go func() {
+				_, _ = io.Copy(io.Discard, channel)
+				close(stdinDone)
+			}()
+			for req := range requests {
+				if req.Type == "exec" || req.Type == "shell" {
+					if req.WantReply {
+						_ = req.Reply(true, nil)
+					}
+					<-stdinDone
+					_, _ = io.WriteString(channel, "pong")
+					_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct {
+						Status uint32
+					}{Status: 0}))
+					return
+				}
+				if req.WantReply {
+					_ = req.Reply(false, nil)
+				}
+			}
+		}()
+	}
 }
 
 func serveTargetSession(conn net.Conn, cfg *ssh.ServerConfig) {

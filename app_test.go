@@ -2,6 +2,7 @@ package bunker
 
 import (
 	"crypto/tls"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/bunker/model/dao"
+	"gorm.io/gorm"
 )
 
 func TestCheckPassword(t *testing.T) {
@@ -127,6 +129,9 @@ func TestSignInSession(t *testing.T) {
 
 	rr = signIn(t, h, " alice ", "secret1")
 	requireStatus(t, rr, http.StatusOK)
+	if rr.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("cache-control = %q", rr.Header().Get("Cache-Control"))
+	}
 	if strings.Contains(rr.Body.String(), "$2") {
 		t.Fatalf("password digest leaked: %s", rr.Body.String())
 	}
@@ -154,8 +159,15 @@ func TestSignInSession(t *testing.T) {
 
 	current := doJSON(t, h, http.MethodGet, "/backend/current_user", "", cookieHeader(cookie))
 	requireStatus(t, current, http.StatusOK)
-	if decodeBody(t, current)["user"].(map[string]any)["id"] != "alice" {
+	if current.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("cache-control = %q", current.Header().Get("Cache-Control"))
+	}
+	session := decodeBody(t, current)
+	if session["user"].(map[string]any)["id"] != "alice" {
 		t.Fatalf("current user = %s", current.Body.String())
+	}
+	if _, ok := session["token"].(map[string]any)["id"]; ok || strings.Contains(current.Body.String(), cookie.Value) {
+		t.Fatalf("token id leaked: %s", current.Body.String())
 	}
 
 	out := doJSON(t, h, http.MethodPost, "/backend/sign_out", `{}`, cookieHeader(cookie))
@@ -240,6 +252,8 @@ func TestKeysAPI(t *testing.T) {
 	requireStatus(t, rr, http.StatusUnauthorized)
 
 	line := authorizedLine(testPublicKey(t))
+	rr = doJSON(t, h, http.MethodPost, "/backend/keys/create", `{"display_name":"lap\ntop","public_key":"`+line+`"}`, alice)
+	requireStatus(t, rr, http.StatusBadRequest)
 	rr = doJSON(t, h, http.MethodPost, "/backend/keys/create", `{"display_name":"  ","public_key":"`+line+`"}`, alice)
 	requireStatus(t, rr, http.StatusOK)
 	key := decodeBody(t, rr)["key"].(map[string]any)
@@ -302,6 +316,11 @@ func TestServersAPI(t *testing.T) {
 	requireStatus(t, rr, http.StatusOK)
 	if decodeBody(t, rr)["server"].(map[string]any)["address"] != "example.com:22" {
 		t.Fatalf("server = %s", rr.Body.String())
+	}
+	rr = doJSON(t, h, http.MethodPost, "/backend/servers/create", `{"id":"v6","address":"[::1]"}`, admin)
+	requireStatus(t, rr, http.StatusOK)
+	if decodeBody(t, rr)["server"].(map[string]any)["address"] != "[::1]:22" {
+		t.Fatalf("ipv6 server = %s", rr.Body.String())
 	}
 	rr = doJSON(t, h, http.MethodPost, "/backend/servers/create", `{"id":"web-1","address":"10.0.0.8:2222"}`, admin)
 	requireStatus(t, rr, http.StatusOK)
@@ -392,15 +411,23 @@ func TestGrantsAPI(t *testing.T) {
 	if grants := decodeBody(t, rr)["grants"].([]any); len(grants) != 0 {
 		t.Fatalf("grants = %#v", grants)
 	}
+	rr = doJSON(t, h, http.MethodGet, "/backend/grants?user_id=%20", "", admin)
+	requireStatus(t, rr, http.StatusOK)
+	if grants := decodeBody(t, rr)["grants"].([]any); len(grants) != 0 {
+		t.Fatalf("blank user filter = %#v", grants)
+	}
 
 	rr = doJSON(t, h, http.MethodPost, "/backend/grants/create", `{"user_id":"missing","server_user":"root","server_id":"web-1"}`, admin)
 	requireStatus(t, rr, http.StatusBadRequest)
 	rr = doJSON(t, h, http.MethodPost, "/backend/grants/create", `{"user_id":"dave","server_user":"ro ot","server_id":"web-1"}`, admin)
 	requireStatus(t, rr, http.StatusBadRequest)
 
-	rr = doJSON(t, h, http.MethodPost, "/backend/grants/create", `{"user_id":"dave","server_user":"*","server_id":"web*"}`, admin)
+	rr = doJSON(t, h, http.MethodPost, "/backend/grants/create", `{"user_id":" dave ","server_user":"*","server_id":"web*"}`, admin)
 	requireStatus(t, rr, http.StatusOK)
 	grant := decodeBody(t, rr)["grant"].(map[string]any)
+	if grant["user_id"] != "dave" {
+		t.Fatalf("grant user = %#v", grant["user_id"])
+	}
 	createdAt, _ := grant["created_at"].(string)
 	if createdAt == "" || strings.HasPrefix(createdAt, "0001") {
 		t.Fatalf("grant = %#v", grant)
@@ -469,6 +496,112 @@ func TestAuthorizedKeysAndHostKeysAPI(t *testing.T) {
 	rows, err := q.HostKey.Find()
 	if err != nil || len(rows) != 0 {
 		t.Fatalf("host keys = %d %v", len(rows), err)
+	}
+}
+
+func TestSessionExpiryBlockedUserAndVisitThrottle(t *testing.T) {
+	app, h := newTestApp(t, Config{})
+	insertUser(t, app.db, "alice", "secret1", false, false)
+	q := dao.Use(app.db)
+
+	expired := &model.Token{
+		ID:        "expired-token",
+		UserID:    "alice",
+		UserAgent: "test",
+		CreatedAt: time.Now().Add(-tokenTTL - time.Minute),
+		VisitedAt: time.Now(),
+	}
+	if err := q.Token.Create(expired); err != nil {
+		t.Fatal(err)
+	}
+	rr := doJSON(t, h, http.MethodGet, "/backend/current_user", "", "token=expired-token")
+	requireStatus(t, rr, http.StatusOK)
+	if decodeBody(t, rr)["user"] != nil {
+		t.Fatalf("expired session = %s", rr.Body.String())
+	}
+
+	rr = signIn(t, h, "alice", "secret1")
+	requireStatus(t, rr, http.StatusOK)
+	cookie := tokenCookie(t, rr)
+	if _, err := q.Token.Where(q.Token.ID.Eq("expired-token")).First(); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("sign-in should drop expired tokens, err = %v", err)
+	}
+
+	recent := time.Now().Add(-30 * time.Second)
+	if _, err := q.Token.Where(q.Token.ID.Eq(cookie.Value)).UpdateColumnSimple(q.Token.VisitedAt.Value(recent)); err != nil {
+		t.Fatal(err)
+	}
+	rr = doJSON(t, h, http.MethodGet, "/backend/current_user", "", cookieHeader(cookie))
+	requireStatus(t, rr, http.StatusOK)
+	stored, err := q.Token.Where(q.Token.ID.Eq(cookie.Value)).First()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.VisitedAt.Sub(recent) > 5*time.Second {
+		t.Fatalf("visited_at refreshed inside the window: %s -> %s", recent, stored.VisitedAt)
+	}
+
+	stale := time.Now().Add(-2 * time.Minute)
+	if _, err = q.Token.Where(q.Token.ID.Eq(cookie.Value)).UpdateColumnSimple(q.Token.VisitedAt.Value(stale)); err != nil {
+		t.Fatal(err)
+	}
+	rr = doJSON(t, h, http.MethodGet, "/backend/current_user", "", cookieHeader(cookie))
+	requireStatus(t, rr, http.StatusOK)
+	stored, err = q.Token.Where(q.Token.ID.Eq(cookie.Value)).First()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.VisitedAt.Sub(stale) < time.Minute {
+		t.Fatalf("visited_at stayed stale: %s", stored.VisitedAt)
+	}
+
+	if _, err = q.User.Where(q.User.ID.Eq("alice")).UpdateColumnSimple(q.User.IsBlocked.Value(true)); err != nil {
+		t.Fatal(err)
+	}
+	rr = doJSON(t, h, http.MethodGet, "/backend/current_user", "", cookieHeader(cookie))
+	requireStatus(t, rr, http.StatusOK)
+	if decodeBody(t, rr)["user"] != nil {
+		t.Fatalf("blocked user still signed in: %s", rr.Body.String())
+	}
+	if _, err = q.Token.Where(q.Token.ID.Eq(cookie.Value)).First(); err != nil {
+		t.Fatalf("blocked-user check should leave the token row: %v", err)
+	}
+}
+
+func TestCreateUserSamePasswordKeepsSessions(t *testing.T) {
+	app, h := newTestApp(t, Config{})
+	insertUser(t, app.db, "alice", "secret1", true, false)
+	insertUser(t, app.db, "dave", "secret1", false, false)
+	admin := cookieHeader(tokenCookie(t, signIn(t, h, "alice", "secret1")))
+	dave := cookieHeader(tokenCookie(t, signIn(t, h, "dave", "secret1")))
+
+	rr := doJSON(t, h, http.MethodPost, "/backend/users/create", `{"id":"dave","password":"secret1"}`, admin)
+	requireStatus(t, rr, http.StatusOK)
+	rr = doJSON(t, h, http.MethodGet, "/backend/current_user", "", dave)
+	requireStatus(t, rr, http.StatusOK)
+	if decodeBody(t, rr)["user"] == nil {
+		t.Fatal("same password should keep existing sessions")
+	}
+}
+
+func TestAPIErrorHidesInternalDetails(t *testing.T) {
+	app, _ := newTestApp(t, Config{})
+	rr := httptest.NewRecorder()
+	app.call(rr, httptest.NewRequest(http.MethodGet, "/", nil), func(http.ResponseWriter, *http.Request) error {
+		return errors.New("database secret")
+	})
+	requireStatus(t, rr, http.StatusInternalServerError)
+	if strings.Contains(rr.Body.String(), "database secret") || !strings.Contains(rr.Body.String(), "internal server error") {
+		t.Fatalf("body = %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	app.call(rr, httptest.NewRequest(http.MethodGet, "/", nil), func(http.ResponseWriter, *http.Request) error {
+		return httpFail(http.StatusBadRequest, "bad input")
+	})
+	requireStatus(t, rr, http.StatusBadRequest)
+	if !strings.Contains(rr.Body.String(), "bad input") {
+		t.Fatalf("body = %s", rr.Body.String())
 	}
 }
 

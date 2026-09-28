@@ -74,6 +74,14 @@ func TestHTTPServerDoesNotExposePprof(t *testing.T) {
 		t.Fatalf("empty sign-in = %d %s", rr.Code, rr.Body.String())
 	}
 
+	badJSON := httptest.NewRequest(http.MethodPost, "/backend/sign_in", strings.NewReader(`{`))
+	badJSON.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, badJSON)
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "invalid json") {
+		t.Fatalf("invalid json = %d %s", rr.Code, rr.Body.String())
+	}
+
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rr.Code != http.StatusOK {
@@ -112,6 +120,11 @@ func TestDecodeJSON(t *testing.T) {
 		t.Fatal("expected trailing json to be rejected")
 	}
 
+	req = httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{\"username\":\"a\"}  \n"))
+	if err := decodeJSON(req, &dst); err != nil || dst.Username != "a" {
+		t.Fatalf("trailing whitespace: username=%q err=%v", dst.Username, err)
+	}
+
 	req = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"username":"a"}`))
 	req.Body = http.MaxBytesReader(nil, req.Body, 8)
 	if err := decodeJSON(req, &dst); err == nil {
@@ -147,6 +160,41 @@ func TestHandlerRecoversFromPanic(t *testing.T) {
 	}
 }
 
+func TestIsJSONRequest(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	if isJSONRequest(req) {
+		t.Fatal("missing content type was accepted")
+	}
+	req.Header.Set("Content-Type", "text/plain")
+	if isJSONRequest(req) {
+		t.Fatal("text/plain was accepted")
+	}
+	req.Header.Set("Content-Type", "Application/JSON; charset=utf-8")
+	if !isJSONRequest(req) {
+		t.Fatal("json with charset was rejected")
+	}
+	req.Header.Set("Content-Type", "application/json; =")
+	if isJSONRequest(req) {
+		t.Fatal("malformed content type was accepted")
+	}
+}
+
+func TestWriteAPIError(t *testing.T) {
+	rr := httptest.NewRecorder()
+	writeAPIError(slog.New(slog.DiscardHandler), rr, errors.New("database secret"))
+	requireStatus(t, rr, http.StatusInternalServerError)
+	if strings.Contains(rr.Body.String(), "database secret") {
+		t.Fatalf("internal error leaked: %s", rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	writeAPIError(nil, rr, httpFail(http.StatusBadRequest, "bad input"))
+	requireStatus(t, rr, http.StatusBadRequest)
+	if !strings.Contains(rr.Body.String(), "bad input") {
+		t.Fatalf("body = %s", rr.Body.String())
+	}
+}
+
 func TestSecureResponseWriterSetsHeadersOnce(t *testing.T) {
 	rr := httptest.NewRecorder()
 	w := &secureResponseWriter{ResponseWriter: rr}
@@ -160,6 +208,18 @@ func TestSecureResponseWriterSetsHeadersOnce(t *testing.T) {
 	}
 	if w.Unwrap() != rr {
 		t.Fatal("Unwrap did not return the underlying writer")
+	}
+
+	rr = httptest.NewRecorder()
+	w = &secureResponseWriter{ResponseWriter: rr}
+	if _, err := w.Write([]byte("ok")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte("!")); err != nil {
+		t.Fatal(err)
+	}
+	if rr.Code != http.StatusOK || rr.Body.String() != "ok!" || rr.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("write status = %d body %q headers %#v", rr.Code, rr.Body.String(), rr.Header())
 	}
 }
 

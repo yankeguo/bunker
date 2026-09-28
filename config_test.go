@@ -47,6 +47,22 @@ func TestLoadConfigTrimsAndTrustsProxy(t *testing.T) {
 	}
 }
 
+func TestLoadConfigAcceptsQuotedPort(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	body := []byte("ui:\n  ssh_port: \"8022\"\n")
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfigFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.SSHPort != "8022" {
+		t.Fatalf("ssh_port = %q", cfg.UI.SSHPort)
+	}
+}
+
 func TestLoadConfigEmptyFileUsesDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

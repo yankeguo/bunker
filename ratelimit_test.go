@@ -36,6 +36,30 @@ func TestRateLimiterWindow(t *testing.T) {
 	}
 }
 
+func TestRateLimiterCountsExactlyToTheLimit(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	limiter := newRateLimiter(2, time.Minute)
+	limiter.now = func() time.Time { return now }
+
+	limiter.Fail("a")
+	if ok, _ := limiter.Allowed("a"); !ok {
+		t.Fatal("one failure is still inside the limit")
+	}
+	limiter.Fail("a")
+	if ok, wait := limiter.Allowed("a"); ok || wait != time.Minute {
+		t.Fatalf("at limit allowed=%v wait=%s", ok, wait)
+	}
+
+	now = now.Add(time.Minute + time.Second)
+	limiter.Fail("a")
+	if ok, _ := limiter.Allowed("a"); !ok {
+		t.Fatal("a failure after the window should start a fresh count")
+	}
+	if limiter.entries["a"].count != 1 {
+		t.Fatalf("count = %d", limiter.entries["a"].count)
+	}
+}
+
 func TestRateLimiterKeysAreIndependent(t *testing.T) {
 	limiter := newRateLimiter(1, time.Minute)
 	limiter.Fail("a")

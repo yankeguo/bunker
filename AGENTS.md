@@ -48,9 +48,10 @@ go vet ./...
 go build ./...          # or: go build -o bunker ./cmd/bunker
 ```
 
-Unit tests live in `*_test.go` beside the code they cover. `go test` needs
-`ui/.output/public` to exist because `static.go` embeds it; CI generates the UI
-before testing. A manual smoke run:
+Unit tests live in `*_test.go` beside the code they cover. The `e2e` package
+builds `./cmd/bunker` and exercises the HTTP API and SSH proxy through that
+process. `go test` needs `ui/.output/public` to exist because `static.go`
+embeds it; CI generates the UI before testing. A manual smoke run:
 
 ```bash
 mkdir -p /tmp/data

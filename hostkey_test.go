@@ -5,8 +5,12 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"log/slog"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/yankeguo/bunker/model"
+	"github.com/yankeguo/bunker/model/dao"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -62,6 +66,42 @@ func TestVerifyHostKeyPinsAndRejectsChange(t *testing.T) {
 	}
 	if err := server.verifyHostKey("other", second); err != nil {
 		t.Fatalf("a different server should pin its own key: %v", err)
+	}
+}
+
+func TestVerifyHostKeyUnreadableRows(t *testing.T) {
+	db := openTestDB(t)
+	server := &SSHServer{db: db, log: slog.New(slog.DiscardHandler)}
+	q := dao.Use(db)
+
+	key := testPublicKey(t)
+	if err := q.HostKey.Create(&model.HostKey{
+		ID:          hostKeyID("web-1", key.Type()),
+		ServerID:    "web-1",
+		KeyType:     key.Type(),
+		Fingerprint: "bad",
+		PublicKey:   "not-a-key",
+		CreatedAt:   time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err := server.verifyHostKey("web-1", key)
+	if err == nil || !strings.Contains(err.Error(), "unreadable") {
+		t.Fatalf("err = %v", err)
+	}
+
+	if err = q.HostKey.Create(&model.HostKey{
+		ID:          "other-row",
+		ServerID:    "web-2",
+		KeyType:     key.Type(),
+		Fingerprint: "bad",
+		PublicKey:   "not-a-key",
+		CreatedAt:   time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err = server.verifyHostKey("web-2", key); err != nil {
+		t.Fatalf("unreadable row with a different id should be skipped: %v", err)
 	}
 }
 
