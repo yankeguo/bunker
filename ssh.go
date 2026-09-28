@@ -12,7 +12,6 @@ import (
 
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/bunker/model/dao"
-	"github.com/yankeguo/ufx"
 	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
@@ -36,29 +35,19 @@ type SSHServer struct {
 	listener *net.TCPListener
 }
 
-type sshServerParams struct {
-	Listen string `json:"listen" default:":8022" validate:"required"`
-}
-
 type SSHServerOptions struct {
 	fx.In
 
 	Lifecycle fx.Lifecycle
-	Conf      ufx.Conf
+	Conf      Config
 	DB        *gorm.DB
 	Signers   *Signers
 	Logger    *zap.SugaredLogger
 }
 
 func CreateSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
-	var p sshServerParams
-
-	if err = opts.Conf.Bind(&p, "ssh_server"); err != nil {
-		return
-	}
-
 	s = &SSHServer{
-		listen:  p.Listen,
+		listen:  opts.Conf.SSHServer.Listen,
 		signers: opts.Signers,
 		log:     opts.Logger,
 		db:      opts.DB,

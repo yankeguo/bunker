@@ -2,119 +2,156 @@ package bunker
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/yankeguo/ufx"
 	"go.uber.org/fx"
+	"go.uber.org/zap"
 )
 
-// httpServer is the public HTTP server. It deliberately does not expose the
-// pprof or Prometheus handlers that the upstream toolkit registers, and it
-// sets a header timeout so slow clients cannot hold connections open.
-type httpServer struct {
-	params ufx.ServerParams
-	prober ufx.Prober
-	router ufx.Router
+const (
+	startupDelay  = 3 * time.Second
+	shutdownDelay = 3 * time.Second
+
+	// maxRequestBody bounds every request. State-changing routes apply a
+	// tighter limit before decoding JSON.
+	maxRequestBody = 1 << 20
+)
+
+// statusError is a client error with an HTTP status. The message is returned
+// as JSON {"message": "..."}.
+type statusError struct {
+	status int
+	msg    string
 }
 
-type httpServerOptions struct {
-	fx.In
-	fx.Lifecycle
+func (e *statusError) Error() string { return e.msg }
 
-	ufx.ServerParams
-	ufx.Prober
-	ufx.Router
+func httpFail(status int, msg string) error {
+	return &statusError{status: status, msg: msg}
 }
 
-func NewHTTPServer(opts httpServerOptions) ufx.Server {
-	s := &httpServer{
-		params: opts.ServerParams,
-		prober: opts.Prober,
-		router: opts.Router,
+// HTTPServer is the public HTTP server. It serves the API, the embedded UI,
+// and the liveness/readiness probes. Profiling and metrics endpoints are not
+// registered.
+type HTTPServer struct {
+	srv *http.Server
+}
+
+func NewHTTPServer(lc fx.Lifecycle, cfg Config, app *App, log *zap.SugaredLogger) *HTTPServer {
+	srv := &http.Server{
+		Addr:              cfg.Server.Listen,
+		Handler:           newHandler(app),
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    1 << 16,
+		ErrorLog:          zap.NewStdLog(log.Desugar()),
 	}
 
-	if opts.Lifecycle != nil {
-		hs := &http.Server{
-			Addr:              opts.Listen,
-			Handler:           s,
-			ReadHeaderTimeout: 10 * time.Second,
-			IdleTimeout:       2 * time.Minute,
-			MaxHeaderBytes:    1 << 16,
-		}
-		opts.Lifecycle.Append(fx.Hook{
+	if lc != nil {
+		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
 				chErr := make(chan error, 1)
 				go func() {
-					chErr <- hs.ListenAndServe()
+					chErr <- srv.ListenAndServe()
 				}()
 				select {
 				case err := <-chErr:
 					return err
 				case <-ctx.Done():
-					return hs.Shutdown(ctx)
-				case <-time.After(opts.Delay.Start):
+					return srv.Shutdown(ctx)
+				case <-time.After(startupDelay):
 					return nil
 				}
 			},
 			OnStop: func(ctx context.Context) error {
-				time.Sleep(opts.Delay.Stop)
-				return hs.Shutdown(ctx)
+				time.Sleep(shutdownDelay)
+				return srv.Shutdown(ctx)
 			},
 		})
 	}
 
-	return s
+	return &HTTPServer{srv: srv}
 }
 
-func (s *httpServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w = &secureResponseWriter{ResponseWriter: w}
-	if r.Body != nil {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+func newHandler(app *App) http.Handler {
+	// API routes live on their own mux. The UI catch-all is separate so a
+	// GET to a POST-only route is 405 instead of the SPA's 404 page.
+	api := http.NewServeMux()
+	api.HandleFunc("GET /debug/alive", serveProbe)
+	api.HandleFunc("GET /debug/ready", serveProbe)
+	if app != nil {
+		app.mount(api)
 	}
 
-	// readiness is checked first so it wins when both paths are configured
-	// to the same URL
-	if r.URL.Path == s.params.Path.Readiness {
-		s.serveReadiness(w, r)
-		return
-	}
-	if r.URL.Path == s.params.Path.Liveness {
-		s.serveLiveness(w, r)
-		return
-	}
+	pages := http.NewServeMux()
+	installStatic(pages)
 
-	s.router.ServeHTTP(w, r)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w = &secureResponseWriter{ResponseWriter: w}
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(nil, r.Body, maxRequestBody)
+		}
+		if isServicePath(r.URL.Path) {
+			api.ServeHTTP(w, r)
+			return
+		}
+		pages.ServeHTTP(w, r)
+	})
 }
 
-func (s *httpServer) serveReadiness(w http.ResponseWriter, r *http.Request) {
-	msg, ready := s.prober.CheckReadiness(r.Context())
+func isServicePath(p string) bool {
+	return p == "/backend" || strings.HasPrefix(p, "/backend/") || p == "/debug" || strings.HasPrefix(p, "/debug/")
+}
+
+func serveProbe(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	if !ready {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-	_, _ = w.Write([]byte(msg))
+	_, _ = w.Write([]byte("OK"))
 }
 
-func (s *httpServer) serveLiveness(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	if s.prober.CheckLiveness() {
-		_, _ = w.Write([]byte("OK"))
+func decodeJSON(r *http.Request, dst any) error {
+	err := json.NewDecoder(r.Body).Decode(dst)
+	if err == nil || errors.Is(err, io.EOF) {
+		return nil
+	}
+	var maxErr *http.MaxBytesError
+	if errors.As(err, &maxErr) {
+		return httpFail(http.StatusRequestEntityTooLarge, "request body is too large")
+	}
+	return httpFail(http.StatusBadRequest, "invalid json")
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	buf, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusInternalServerError)
-	_, _ = w.Write([]byte("CASCADED FAILURE"))
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = w.Write(buf)
+}
+
+func writeAPIError(log *zap.SugaredLogger, w http.ResponseWriter, err error) {
+	var se *statusError
+	if errors.As(err, &se) {
+		writeJSON(w, se.status, map[string]string{"message": se.msg})
+		return
+	}
+	if log != nil {
+		log.With("err", err).Error("request failed")
+	}
+	writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "internal server error"})
 }
 
 type secureResponseWriter struct {
 	http.ResponseWriter
 	wrote bool
-}
-
-func (w *secureResponseWriter) Header() http.Header {
-	return w.ResponseWriter.Header()
 }
 
 func (w *secureResponseWriter) WriteHeader(code int) {

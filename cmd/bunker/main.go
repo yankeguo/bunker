@@ -4,10 +4,8 @@ import (
 	"flag"
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/yankeguo/bunker"
-	"github.com/yankeguo/ufx"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
@@ -41,33 +39,20 @@ func main() {
 			return &fxevent.ZapLogger{Logger: log}
 		}),
 
-		ufx.ProvideConfFromYAMLFile(filepath.Join(optDataDir, "config.yaml")),
-
 		fx.Provide(
-			ufx.ProberParamsFromConf,
-			ufx.RouterParamsFromConf,
-			ufx.ServerParamsFromConf,
-			ufx.NewProber,
-			ufx.NewRouter,
-			bunker.NewHTTPServer,
-		),
-		fx.Invoke(ufx.SetupOTEL),
-		fx.Invoke(func(ufx.Server) {}),
-
-		fx.Provide(
+			bunker.LoadConfig,
 			bunker.CreateDatabase,
 			bunker.CreateSSHServer,
 			bunker.CreateSigners,
 			bunker.CreateApp,
+			bunker.NewHTTPServer,
 		),
 
 		fx.Invoke(
 			bunker.InitializeUsers,
-			bunker.InstallStaticToRouter,
-			bunker.InstallAppToRouter,
+			func(*bunker.HTTPServer) {},
+			func(*bunker.SSHServer) {},
 		),
-
-		fx.Invoke(func(s *bunker.SSHServer) {}),
 	)
 	if app.Err() != nil {
 		log.Println(app.Err().Error())

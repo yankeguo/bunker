@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/yankeguo/bunker/model"
-	"github.com/yankeguo/ufx"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
@@ -178,16 +178,15 @@ func TestVerifyHostKeyPinsAndRejectsChange(t *testing.T) {
 }
 
 func TestHTTPServerDoesNotExposePprof(t *testing.T) {
-	s := &httpServer{
-		params: ufx.ServerParams{},
-		prober: ufx.NewProber(ufx.ProberParams{}),
-		router: ufx.NewRouter(ufx.RouterParams{}),
+	app := &App{
+		log:             zap.NewNop().Sugar(),
+		signInLimiter:   newRateLimiter(signInRateLimit, signInRateWindow),
+		passwordLimiter: newRateLimiter(passwordRateLimit, passwordRateWindow),
 	}
-	s.params.Path.Readiness = "/debug/ready"
-	s.params.Path.Liveness = "/debug/alive"
+	h := newHandler(app)
 
 	rr := httptest.NewRecorder()
-	s.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/debug/pprof/", nil))
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("pprof status = %d, want 404", rr.Code)
 	}
@@ -196,18 +195,68 @@ func TestHTTPServerDoesNotExposePprof(t *testing.T) {
 	}
 
 	rr = httptest.NewRecorder()
-	s.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/debug/metrics", nil))
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/debug/metrics", nil))
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("metrics status = %d, want 404", rr.Code)
 	}
 
 	rr = httptest.NewRecorder()
-	s.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/debug/alive", nil))
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/debug/alive", nil))
 	if rr.Code != http.StatusOK || rr.Body.String() != "OK" {
 		t.Fatalf("liveness = %d %q", rr.Code, rr.Body.String())
 	}
 	if rr.Header().Get("X-Frame-Options") != "DENY" {
 		t.Fatal("missing frame protection header")
+	}
+
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/debug/ready", nil))
+	if rr.Code != http.StatusOK || rr.Body.String() != "OK" {
+		t.Fatalf("readiness = %d %q", rr.Code, rr.Body.String())
+	}
+
+	form := httptest.NewRequest(http.MethodPost, "/backend/sign_in", strings.NewReader("username=a&password=b"))
+	form.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, form)
+	if rr.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("form sign-in status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	get := httptest.NewRequest(http.MethodGet, "/backend/sign_in", nil)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, get)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET sign-in status = %d, want 405", rr.Code)
+	}
+
+	empty := httptest.NewRequest(http.MethodPost, "/backend/sign_in", strings.NewReader(`{}`))
+	empty.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, empty)
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "username and password are required") {
+		t.Fatalf("empty sign-in = %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestLoadConfigAppliesDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("ui:\n  ssh_host: bunker.example\n  ssh_port: 8022\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfigFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.SSHHost != "bunker.example" || cfg.UI.SSHPort != "8022" {
+		t.Fatalf("ui = %+v", cfg.UI)
+	}
+	if cfg.Server.Listen != ":8080" || cfg.SSHServer.Listen != ":8022" {
+		t.Fatalf("listens = %s %s", cfg.Server.Listen, cfg.SSHServer.Listen)
+	}
+	if cfg.Server.TrustProxy {
+		t.Fatal("trust_proxy should default to false")
 	}
 }
 
