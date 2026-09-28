@@ -58,11 +58,11 @@ const links = [
       <span class="text-2xl font-semibold">{{ titleName }}</span>
     </div>
 
-    <div class="flex flex-row mt-8 px-2.5">
-      <div class="w-80 me-8">
+    <div class="flex flex-col lg:flex-row mt-8 px-2.5 gap-8">
+      <div class="w-full lg:w-80 shrink-0">
         <slot name="left"></slot>
       </div>
-      <div class="flex-grow">
+      <div class="flex-grow min-w-0 overflow-x-auto">
         <slot></slot>
       </div>
     </div>

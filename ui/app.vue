@@ -5,6 +5,6 @@
       <NuxtPage></NuxtPage>
     </NuxtLayout>
   </UContainer>
-  <UNotifications />
+  <UNotifications :ui="{ strategy: 'override', position: 'top-0 end-0' }" />
   <Footer></Footer>
 </template>

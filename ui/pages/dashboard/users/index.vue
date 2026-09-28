@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import type { FormError, FormSubmitEvent } from "#ui/types";
 import { guardWorking } from "~/composables/error";
+import { fill } from "~/utils/format";
 
 const { $t } = useNuxtApp()
 
 definePageMeta({
-  middleware: ["auth"],
+  middleware: ["auth", "admin"],
 });
 
 const { data: users, refresh: refreshUsers } = await useUsers();
+const { data: currentUser } = await useCurrentUser();
 
 const columns = [
   {
@@ -34,8 +36,8 @@ const state = reactive<{
 
 const validate = (state: any): FormError[] => {
   const errors = [];
-  if (!state.id) errors.push({ path: "id", message: "Required" });
-  if (!state.password) errors.push({ path: "password", message: "Required" });
+  if (!state.id) errors.push({ path: "id", message: $t("common.required") });
+  if (!state.password) errors.push({ path: "password", message: $t("common.required") });
   return errors;
 };
 
@@ -46,12 +48,10 @@ async function onSubmit(event: FormSubmitEvent<any>) {
 
     await $fetch("/backend/users/create", {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(event.data)
+      body: event.data,
     })
 
+    state.password = undefined
     await refreshUsers()
 
   })
@@ -61,14 +61,14 @@ async function updateUser(id: string, { is_admin, is_blocked }: { is_admin?: boo
   const actions = [];
 
   if (typeof is_admin === 'boolean') {
-    actions.push(is_admin ? 'set admin' : 'unset admin')
+    actions.push(is_admin ? $t('users.assign_admin') : $t('users.revoke_admin'))
   }
 
   if (typeof is_blocked === 'boolean') {
-    actions.push(is_blocked ? 'block' : 'unblock')
+    actions.push(is_blocked ? $t('users.disable') : $t('users.enable'))
   }
 
-  if (!confirm(`Confirm to ${actions.join(' and ')} for user ${id}?`)) {
+  if (!confirm(fill($t('users.confirm_update'), { actions: actions.join(', '), id }))) {
     return
   }
 
@@ -76,10 +76,7 @@ async function updateUser(id: string, { is_admin, is_blocked }: { is_admin?: boo
 
     await $fetch("/backend/users/update", {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ id, is_admin, is_blocked })
+      body: { id, is_admin, is_blocked },
     })
 
     await refreshUsers()
@@ -126,22 +123,28 @@ async function updateUser(id: string, { is_admin, is_blocked }: { is_admin?: boo
         <UBadge variant="outline" v-else>{{ $t('common.user_role_standard') }}</UBadge>
       </template>
       <template #actions-data="{ row }">
-        <template v-if="!row.is_blocked">
-          <UButton class="w-30" v-if="row.is_admin" variant="ghost" color="red" icon="i-mdi-account-tie-voice-off"
-            :label="$t('users.revoke_admin')" @click="updateUser(row.id, { is_admin: false })" :disabled="!!working"
-            :loading="!!working"></UButton>
-          <UButton class="w-30" v-else variant="ghost" color="lime" icon="i-mdi-account-tie-voice"
-            :label="$t('users.assign_admin')" @click="updateUser(row.id, { is_admin: true })" :disabled="!!working"
+        <span v-if="row.id === currentUser.user?.id" class="text-sm text-gray-500">{{ $t('users.current') }}</span>
+        <template v-else>
+          <template v-if="!row.is_blocked">
+            <UButton class="w-30" v-if="row.is_admin" variant="ghost" color="red" icon="i-mdi-account-tie-voice-off"
+              :label="$t('users.revoke_admin')" @click="updateUser(row.id, { is_admin: false })" :disabled="!!working"
+              :loading="!!working"></UButton>
+            <UButton class="w-30" v-else variant="ghost" color="lime" icon="i-mdi-account-tie-voice"
+              :label="$t('users.assign_admin')" @click="updateUser(row.id, { is_admin: true })" :disabled="!!working"
+              :loading="!!working"></UButton>
+          </template>
+
+          <UButton class="ms-2 w-20" v-if="row.is_blocked" variant="ghost" color="lime" icon="i-mdi-account-check"
+            :label="$t('users.enable')" @click="updateUser(row.id, { is_blocked: false })" :disabled="!!working"
+            :loading="!!working">
+          </UButton>
+          <UButton class="ms-2 w-20" v-else variant="ghost" color="red" icon="i-mdi-account-cancel"
+            :label="$t('users.disable')" @click="updateUser(row.id, { is_blocked: true })" :disabled="!!working"
             :loading="!!working"></UButton>
         </template>
-
-        <UButton class="ms-2 w-20" v-if="row.is_blocked" variant="ghost" color="lime" icon="i-mdi-account-check"
-          :label="$t('users.enable')" @click="updateUser(row.id, { is_blocked: false })" :disabled="!!working"
-          :loading="!!working">
-        </UButton>
-        <UButton class="ms-2 w-20" v-else variant="ghost" color="red" icon="i-mdi-account-cancel"
-          :label="$t('users.disable')" @click="updateUser(row.id, { is_blocked: true })" :disabled="!!working"
-          :loading="!!working"></UButton>
+      </template>
+      <template #empty-state>
+        <div class="py-6 text-center text-sm text-gray-500">{{ $t('common.empty') }}</div>
       </template>
     </UTable>
   </SkeletonDashboard>

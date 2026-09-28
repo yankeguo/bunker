@@ -13,7 +13,7 @@ const isDark = computed({
 });
 
 function setLanguage(lang: string) {
-  document.cookie = `lang=${lang};path=/;max-age=31536000`;
+  document.cookie = `lang=${lang};path=/;max-age=31536000;samesite=lax`;
   location.reload();
 }
 </script>
@@ -35,7 +35,7 @@ function setLanguage(lang: string) {
           }" href="#">
             <span>{{ $langNames[item] }}</span>
           </a>
-          <i class="i-bi-dot text-slate-400" />
+          <span class="text-slate-400 me-2">·</span>
         </template>
 
         <UButton :icon="isDark ? 'i-heroicons-moon-20-solid' : 'i-heroicons-sun-20-solid'

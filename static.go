@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/yankeguo/rg"
-	"github.com/yankeguo/ufx"
 )
 
 //go:embed ui/.output/public ui/.output/public/**/*
@@ -53,12 +52,12 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.fileServer.ServeHTTP(w, r)
 }
 
-func InstallStaticToRouter(ur ufx.Router) {
+func installStatic(mux *http.ServeMux) {
 	if Debug("ui") {
 		proxy := httputil.NewSingleHostReverseProxy(rg.Must(url.Parse("http://localhost:3000")))
-		ur.ServeMux().Handle("/", proxy)
-	} else {
-		f := rg.Must(fs.Sub(STATIC, path.Join("ui", ".output", "public")))
-		ur.ServeMux().Handle("/", spaHandler{fsys: f, fileServer: http.FileServer(http.FS(f))})
+		mux.Handle("/", proxy)
+		return
 	}
+	f := rg.Must(fs.Sub(STATIC, path.Join("ui", ".output", "public")))
+	mux.Handle("/", spaHandler{fsys: f, fileServer: http.FileServer(http.FS(f))})
 }

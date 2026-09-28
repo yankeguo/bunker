@@ -16,17 +16,19 @@ import (
 )
 
 var (
-	Q      = new(Query)
-	Grant  *grant
-	Key    *key
-	Server *server
-	Token  *token
-	User   *user
+	Q       = new(Query)
+	Grant   *grant
+	HostKey *hostKey
+	Key     *key
+	Server  *server
+	Token   *token
+	User    *user
 )
 
 func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	*Q = *Use(db, opts...)
 	Grant = &Q.Grant
+	HostKey = &Q.HostKey
 	Key = &Q.Key
 	Server = &Q.Server
 	Token = &Q.Token
@@ -35,23 +37,25 @@ func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 
 func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 	return &Query{
-		db:     db,
-		Grant:  newGrant(db, opts...),
-		Key:    newKey(db, opts...),
-		Server: newServer(db, opts...),
-		Token:  newToken(db, opts...),
-		User:   newUser(db, opts...),
+		db:      db,
+		Grant:   newGrant(db, opts...),
+		HostKey: newHostKey(db, opts...),
+		Key:     newKey(db, opts...),
+		Server:  newServer(db, opts...),
+		Token:   newToken(db, opts...),
+		User:    newUser(db, opts...),
 	}
 }
 
 type Query struct {
 	db *gorm.DB
 
-	Grant  grant
-	Key    key
-	Server server
-	Token  token
-	User   user
+	Grant   grant
+	HostKey hostKey
+	Key     key
+	Server  server
+	Token   token
+	User    user
 }
 
 func (q *Query) Available() bool { return q.db != nil }
@@ -60,12 +64,13 @@ func (q *Query) UnderlyingDB() *gorm.DB { return q.db }
 
 func (q *Query) clone(db *gorm.DB) *Query {
 	return &Query{
-		db:     db,
-		Grant:  q.Grant.clone(db),
-		Key:    q.Key.clone(db),
-		Server: q.Server.clone(db),
-		Token:  q.Token.clone(db),
-		User:   q.User.clone(db),
+		db:      db,
+		Grant:   q.Grant.clone(db),
+		HostKey: q.HostKey.clone(db),
+		Key:     q.Key.clone(db),
+		Server:  q.Server.clone(db),
+		Token:   q.Token.clone(db),
+		User:    q.User.clone(db),
 	}
 }
 
@@ -79,30 +84,33 @@ func (q *Query) WriteDB() *Query {
 
 func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 	return &Query{
-		db:     db,
-		Grant:  q.Grant.replaceDB(db),
-		Key:    q.Key.replaceDB(db),
-		Server: q.Server.replaceDB(db),
-		Token:  q.Token.replaceDB(db),
-		User:   q.User.replaceDB(db),
+		db:      db,
+		Grant:   q.Grant.replaceDB(db),
+		HostKey: q.HostKey.replaceDB(db),
+		Key:     q.Key.replaceDB(db),
+		Server:  q.Server.replaceDB(db),
+		Token:   q.Token.replaceDB(db),
+		User:    q.User.replaceDB(db),
 	}
 }
 
 type queryCtx struct {
-	Grant  *grantDo
-	Key    *keyDo
-	Server *serverDo
-	Token  *tokenDo
-	User   *userDo
+	Grant   *grantDo
+	HostKey *hostKeyDo
+	Key     *keyDo
+	Server  *serverDo
+	Token   *tokenDo
+	User    *userDo
 }
 
 func (q *Query) WithContext(ctx context.Context) *queryCtx {
 	return &queryCtx{
-		Grant:  q.Grant.WithContext(ctx),
-		Key:    q.Key.WithContext(ctx),
-		Server: q.Server.WithContext(ctx),
-		Token:  q.Token.WithContext(ctx),
-		User:   q.User.WithContext(ctx),
+		Grant:   q.Grant.WithContext(ctx),
+		HostKey: q.HostKey.WithContext(ctx),
+		Key:     q.Key.WithContext(ctx),
+		Server:  q.Server.WithContext(ctx),
+		Token:   q.Token.WithContext(ctx),
+		User:    q.User.WithContext(ctx),
 	}
 }
 

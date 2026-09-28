@@ -7,12 +7,9 @@ on:
       - main
     tags:
       - "v*.*.*"
-  pull_request:
-    branches:
-      - main
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,36 +22,53 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: actions/setup-node@v4
+      - name: setup node
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org/
-          cache: "npm"
-          cache-dependency-path: "ui/package-lock.json"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
 
-      - run: npm ci
+      - name: setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: install ui
         working-directory: ui
+        run: npm ci
 
-      - run: npm run generate
+      - name: generate ui
         working-directory: ui
+        run: npm run generate
 
-      - name: docker-setup
+      - name: test
+        run: go test ./...
+
+      - name: vet
+        run: go vet ./...
+
+      - name: build
+        run: go build -o bunker ./cmd/bunker
+
+      - name: docker setup
         uses: docker/setup-buildx-action@v3
 
-      - name: docker-login-ghcr
+      - name: docker login ghcr
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: docker-login-dockerhub
+      - name: docker login dockerhub
         uses: docker/login-action@v3
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: docker-meta
+      - name: docker meta
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -63,19 +77,17 @@ jobs:
             ${{ github.repository }}
           tags: |-
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=pr,enable=${{ github.event_name == 'pull_request' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
 
-      - name: docker-build-and-push
-        id: build-and-push
+      - name: docker build and push
         uses: docker/build-push-action@v6
         with:
           context: .
+          pull: true
+          push: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          pull: true
-          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

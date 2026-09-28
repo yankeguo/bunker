@@ -14,4 +14,4 @@ WORKDIR /data
 
 COPY --from=builder /bunker /bunker
 
-CMD ["/bunker"]
+CMD ["/bunker", "--data-dir", "/data"]

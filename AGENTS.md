@@ -18,7 +18,7 @@ key and pipes the session to the target server using its own client keys (see
 
 ## Repository Layout
 
-- `cmd/bunker/main.go` — entrypoint, wires everything with `go.uber.org/fx`
+- `cmd/bunker/main.go` — entrypoint; builds the database, keys, HTTP server, and SSH server directly
 - `app.go` — HTTP API routes (under `/backend/...`)
 - `ssh.go` — SSH bastion server and session piping
 - `signers.go` — host/client SSH key generation and loading (stored in the data dir)
@@ -60,11 +60,9 @@ Docker: `docker build .` — but the UI must be generated into `ui/.output/publi
 
 ## Dependency Notes
 
-- `github.com/yankeguo/ufx` (v0.2.5, unmaintained upstream) uses
-  `otelhttp.DefaultClient` and `otelhttp.WithRouteTag`, which were removed in
-  `go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp` v0.65.0. Keep
-  otelhttp pinned at **v0.64.0** (and otel at the matching v1.39.x) unless ufx is
-  replaced.
+- The HTTP server is the standard library `net/http` server, with Go 1.22 method
+  patterns (`GET /backend/...`, `POST /backend/...`). Do not add a routing
+  wrapper.
 - UI dependencies are intentionally kept on their current majors: Nuxt 3 + `@nuxt/ui`
   v2. Upgrading to Nuxt 4 / `@nuxt/ui` v3+ is a breaking rewrite of the components.
 - npm gates dependency install scripts; `esbuild`'s postinstall is approved via the
@@ -91,11 +89,11 @@ are auto-generated into the data dir on first run.
 
 ## Conventions
 
-- Error handling in HTTP handlers uses `rg.Must*` (panic-on-error) and `halt` for
-  client errors; keep that style.
+- HTTP handlers return errors. Client errors use `httpFail(status, message)` and
+  are written as JSON `{"message":"..."}`. Unexpected failures are logged and
+  returned as a generic 500. `rg.Must*` is for startup and non-HTTP code.
 - Database access goes through the generated `dao` package, not raw gorm calls.
-- `ufx.Context.Bind` only binds fields; it does **not** run `validate` tags (only
-  `ufx.Conf.Bind` does), so validate request fields explicitly in handlers.
-- State-changing endpoints are wrapped with `post(...)` in `app.go`; they must be
-  called with POST and never perform side effects on GET.
+- Validate request fields explicitly in handlers.
+- State-changing routes are registered as `POST` and reject a non-JSON body.
+  They must never perform side effects on GET.
 - Use conventional commit messages.

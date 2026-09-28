@@ -8,12 +8,11 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/pem"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/yankeguo/ufx"
-	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -53,7 +52,7 @@ type Signers struct {
 	AuthorizedKeys string
 }
 
-func loadOrCreateSigner(log *zap.SugaredLogger, filename string, generator SSHPrivateKeyGenerator) (sgn ssh.Signer, err error) {
+func loadOrCreateSigner(log *slog.Logger, filename string, generator SSHPrivateKeyGenerator) (sgn ssh.Signer, err error) {
 	var buf []byte
 	if buf, err = os.ReadFile(filename); err == nil {
 		if sgn, err = ssh.ParsePrivateKey(buf); err != nil {
@@ -89,7 +88,7 @@ func loadOrCreateSigner(log *zap.SugaredLogger, filename string, generator SSHPr
 	return
 }
 
-func CreateSigners(log *zap.SugaredLogger, dir DataDir) (signers *Signers, err error) {
+func CreateSigners(log *slog.Logger, dir DataDir) (signers *Signers, err error) {
 	signers = &Signers{}
 
 	for _, item := range []struct {
@@ -123,10 +122,4 @@ func CreateSigners(log *zap.SugaredLogger, dir DataDir) (signers *Signers, err e
 	log.Info("\n------- Client Public Keys -------\n" + strings.TrimSpace(signers.AuthorizedKeys) + "\n----------------------------------")
 
 	return
-}
-
-func InstallSignersToRouter(ur ufx.Router, signers *Signers) {
-	ur.HandleFunc("/backend/authorized_keys", func(c ufx.Context) {
-		c.Text(signers.AuthorizedKeys)
-	})
 }

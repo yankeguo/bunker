@@ -6,4 +6,5 @@ var All = []any{
 	Server{},
 	Grant{},
 	Token{},
+	HostKey{},
 }

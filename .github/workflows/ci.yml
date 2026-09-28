@@ -1,0 +1,67 @@
+name: build and test
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: install ui
+        working-directory: ui
+        run: npm ci
+
+      - name: generate ui
+        working-directory: ui
+        run: npm run generate
+
+      - name: test
+        run: go test ./...
+
+      - name: vet
+        run: go vet ./...
+
+      - name: build
+        run: go build -o bunker ./cmd/bunker
+
+      - name: docker setup
+        uses: docker/setup-buildx-action@v3
+
+      - name: docker build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          pull: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

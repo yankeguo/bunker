@@ -37,3 +37,11 @@ export interface BGrantedItem {
   server_user: string;
   server_id: string;
 }
+
+export interface BHostKey {
+  id: string;
+  server_id: string;
+  key_type: string;
+  fingerprint: string;
+  created_at: string;
+}

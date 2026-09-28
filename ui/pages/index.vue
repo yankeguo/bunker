@@ -9,8 +9,8 @@ const state = reactive({
 
 const validate = (state: any): FormError[] => {
   const errors = [];
-  if (!state.username) errors.push({ path: "username", message: "Required" });
-  if (!state.password) errors.push({ path: "password", message: "Required" });
+  if (!state.username) errors.push({ path: "username", message: useNuxtApp().$t("common.required") });
+  if (!state.password) errors.push({ path: "password", message: useNuxtApp().$t("common.required") });
   return errors;
 };
 
@@ -20,10 +20,7 @@ async function onSubmit(event: FormSubmitEvent<any>) {
   return guardWorking(working, async () => {
     await $fetch("/backend/sign_in", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(event.data),
+      body: event.data,
     });
     await refreshCurrentUser();
     await navigateTo({ name: "dashboard" });
@@ -33,8 +30,8 @@ async function onSubmit(event: FormSubmitEvent<any>) {
 const { data: currentUser, refresh: refreshCurrentUser } =
   await useCurrentUser();
 
-if (currentUser.value.user && currentUser.value.token) {
-  navigateTo({ name: "dashboard" });
+if (currentUser.value.user) {
+  await navigateTo({ name: "dashboard" });
 }
 </script>
 

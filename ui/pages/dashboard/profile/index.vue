@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { FormError, FormSubmitEvent } from "#ui/types";
 import { guardWorking } from "~/composables/error";
+import { formatTime } from "~/utils/format";
 
 definePageMeta({
   middleware: ["auth"],
@@ -21,15 +22,15 @@ const fields = computed(() => [
   },
   {
     name: $t('common.created_at'),
-    content: currentUser.value.user?.created_at || "",
+    content: formatTime(currentUser.value.user?.created_at),
   },
 ]);
 
 async function doSignOut() {
-  if (!confirm("Are you sure to sign out?")) {
+  if (!confirm($t("profile.confirm_sign_out"))) {
     return;
   }
-  await $fetch("/backend/sign_out", { method: "POST" });
+  await $fetch("/backend/sign_out", { method: "POST", body: {} });
   // drop the cached current user, otherwise the index page would redirect
   // straight back to the dashboard
   clearNuxtData("current-user");
@@ -48,11 +49,11 @@ const state = reactive<{
 
 const validate = (state: any): FormError[] => {
   const errors = [];
-  if (!state.old_password) errors.push({ path: "old_password", message: "Required" });
-  if (!state.new_password) errors.push({ path: "new_password", message: "Required" });
-  if (!state.repeat_password) errors.push({ path: "repeat_password", message: "Required" });
-  if (state.new_password && state.new_password.length < 6) errors.push({ path: "new_password", message: "Too short, must >= 6" });
-  if (state.new_password !== state.repeat_password) errors.push({ path: "repeat_password", message: "Not match" });
+  if (!state.old_password) errors.push({ path: "old_password", message: $t("common.required") });
+  if (!state.new_password) errors.push({ path: "new_password", message: $t("common.required") });
+  if (!state.repeat_password) errors.push({ path: "repeat_password", message: $t("common.required") });
+  if (state.new_password && state.new_password.length < 6) errors.push({ path: "new_password", message: $t("profile.password_too_short") });
+  if (state.new_password !== state.repeat_password) errors.push({ path: "repeat_password", message: $t("profile.password_not_match") });
   return errors;
 };
 
@@ -62,10 +63,10 @@ async function onSubmit(event: FormSubmitEvent<any>) {
   await guardWorking(working, async () => {
     await $fetch("/backend/update_password", {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
+      body: {
+        old_password: event.data.old_password,
+        new_password: event.data.new_password,
       },
-      body: JSON.stringify(event.data)
     })
     state.old_password = ''
     state.new_password = ''
@@ -92,7 +93,7 @@ async function onSubmit(event: FormSubmitEvent<any>) {
         </div>
       </UCard>
     </template>
-    <UCard :ui="uiCard" class="w-80">
+    <UCard :ui="uiCard" class="w-full max-w-sm">
       <template #header>
         <div class="flex flex-row items-center">
           <UIcon name="i-mdi-form-textbox-password" class="me-1"></UIcon>
