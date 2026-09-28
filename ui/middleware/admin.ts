@@ -2,15 +2,13 @@ export default defineNuxtRouteMiddleware(async () => {
   const { data } = await useCurrentUser();
   const { $t } = useNuxtApp();
 
-  if (!data.value.user) {
+  if (!data.value.user?.is_admin) {
     const toast = useToast();
-
     toast.add({
-      id: "not-signed-in",
-      title: $t("auth.not_signed_in"),
+      id: "not-admin",
+      title: $t("auth.not_admin"),
       color: "red",
     });
-
-    return navigateTo({ name: "index" });
+    return navigateTo({ name: "dashboard" });
   }
 });

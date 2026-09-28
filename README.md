@@ -52,6 +52,14 @@ ssh_server:
   listen: ":8022"
 ```
 
+## SSH host keys
+
+On the first successful connection to a target, Bunker pins that server's host key (one key per algorithm). A later connection is refused if a recorded key changes. After reinstalling a server, reset its host key from the server page.
+
+## HTTP service
+
+Liveness and readiness are served at `/debug/alive` and `/debug/ready`. Profiling and metrics endpoints are not exposed.
+
 ## Build from Source
 
 Requirements:

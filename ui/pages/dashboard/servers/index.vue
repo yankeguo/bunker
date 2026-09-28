@@ -1,14 +1,24 @@
 <script setup lang="ts">
 import type { FormError, FormSubmitEvent } from "#ui/types";
 import { guardWorking } from "~/composables/error";
+import { fill } from "~/utils/format";
 
 const { $t } = useNuxtApp();
 
 definePageMeta({
-  middleware: ["auth"],
+  middleware: ["auth", "admin"],
 });
 
 const { data: servers, refresh: refreshServers } = await useServers();
+const { data: hostKeys, refresh: refreshHostKeys } = await useHostKeys();
+
+const hostKeysByServer = computed(() => {
+  const grouped: Record<string, BHostKey[]> = {};
+  for (const key of hostKeys.value.host_keys || []) {
+    (grouped[key.server_id] ||= []).push(key);
+  }
+  return grouped;
+});
 
 const columns = [
   {
@@ -18,6 +28,10 @@ const columns = [
   {
     key: "address",
     label: $t('common.server_address'),
+  },
+  {
+    key: "host_key",
+    label: $t('servers.host_key'),
   },
   {
     key: 'actions'
@@ -34,8 +48,8 @@ const state = reactive<{
 
 const validate = (state: any): FormError[] => {
   const errors = [];
-  if (!state.id) errors.push({ path: "id", message: "Required" });
-  if (!state.address) errors.push({ path: "address", message: "Required" });
+  if (!state.id) errors.push({ path: "id", message: $t("common.required") });
+  if (!state.address) errors.push({ path: "address", message: $t("common.required") });
   return errors;
 };
 
@@ -46,10 +60,7 @@ async function onSubmit(event: FormSubmitEvent<any>) {
 
     await $fetch("/backend/servers/create", {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(event.data)
+      body: event.data,
     })
 
     await refreshServers()
@@ -63,7 +74,7 @@ async function editServer({ id, address }: { id: string, address: string }) {
 }
 
 async function deleteServer(id: string) {
-  if (!confirm(`Confirm to delete server ${id}?`)) {
+  if (!confirm(fill($t('servers.confirm_delete'), { id }))) {
     return
   }
 
@@ -71,14 +82,26 @@ async function deleteServer(id: string) {
 
     await $fetch("/backend/servers/delete", {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ id })
+      body: { id },
     })
 
     await refreshServers()
+    await refreshHostKeys()
 
+  })
+}
+
+async function resetHostKeys(id: string) {
+  if (!confirm(fill($t('servers.confirm_reset_host_key'), { id }))) {
+    return
+  }
+
+  await guardWorking(working, async () => {
+    await $fetch("/backend/host_keys/delete", {
+      method: 'POST',
+      body: { server_id: id },
+    })
+    await refreshHostKeys()
   })
 }
 </script>
@@ -124,12 +147,26 @@ async function deleteServer(id: string) {
     </template>
 
     <UTable :rows="servers.servers" :columns="columns">
+      <template #host_key-data="{ row }">
+        <div v-if="hostKeysByServer[row.id]?.length" class="space-y-1">
+          <div v-for="key in hostKeysByServer[row.id]" :key="key.id" class="font-mono text-xs break-all">
+            {{ key.key_type }} {{ key.fingerprint }}
+          </div>
+          <UButton size="2xs" variant="ghost" color="red" :label="$t('servers.reset_host_key')"
+            :disabled="!!working" @click="resetHostKeys(row.id)" />
+        </div>
+        <span v-else class="text-sm text-gray-500">{{ $t('servers.host_key_empty') }}</span>
+      </template>
+
       <template #actions-data="{ row }">
         <UButton variant="link" color="blue" icon="i-mdi-edit" :label="$t('common.edit')" @click="editServer(row)"
           :disabled="!!working" :loading="!!working"></UButton>
 
         <UButton variant="link" color="red" icon="i-mdi-trash" :label="$t('common.delete')" @click="deleteServer(row.id)"
           :disabled="!!working" :loading="!!working"></UButton>
+      </template>
+      <template #empty-state>
+        <div class="py-6 text-center text-sm text-gray-500">{{ $t('common.empty') }}</div>
       </template>
 
     </UTable>

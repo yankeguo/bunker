@@ -24,24 +24,17 @@ const columns = [
 
 const { data: keys, refresh: refreshKeys } = await useKeys();
 
-const deletionWorking = ref(false);
-
 async function deleteKey(id: string) {
-  if (!confirm("Are you sure you want to delete this key?")) {
+  if (!confirm($t("ssh_keys.confirm_delete"))) {
     return;
   }
-  deletionWorking.value = true;
-  try {
+  await guardWorking(working, async () => {
     await $fetch("/backend/keys/delete", {
       method: "POST",
-      body: JSON.stringify({ id }),
+      body: { id },
     });
-  } catch (e: any) {
-    handleError(e);
-  } finally {
-    deletionWorking.value = false;
-  }
-  refreshKeys();
+    await refreshKeys();
+  });
 }
 
 const state = reactive({
@@ -52,9 +45,9 @@ const state = reactive({
 const validate = (state: any): FormError[] => {
   const errors = [];
   if (!state.display_name)
-    errors.push({ path: "display_name", message: "Required" });
+    errors.push({ path: "display_name", message: $t("common.required") });
   if (!state.public_key)
-    errors.push({ path: "public_key", message: "Required" });
+    errors.push({ path: "public_key", message: $t("common.required") });
   return errors;
 };
 
@@ -64,12 +57,12 @@ async function onSubmit(event: FormSubmitEvent<any>) {
   return guardWorking(working, async () => {
     await $fetch("/backend/keys/create", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(event.data),
+      body: event.data,
     });
-    await refreshKeys()
+    state.display_name = undefined;
+    state.public_key = undefined;
+    await refreshKeys();
+    useToast().add({ title: $t("ssh_keys.saved"), color: "green" });
   })
 }
 </script>
@@ -100,8 +93,12 @@ async function onSubmit(event: FormSubmitEvent<any>) {
 
     <UTable :rows="keys.keys" :columns="columns">
       <template #actions-data="{ row }">
-        <UButton variant="link" color="red" icon="i-mdi-trash" :label="$t('common.delete')" @click="deleteKey(row.id)">
+        <UButton variant="link" color="red" icon="i-mdi-trash" :label="$t('common.delete')" :disabled="!!working"
+          :loading="!!working" @click="deleteKey(row.id)">
         </UButton>
+      </template>
+      <template #empty-state>
+        <div class="py-6 text-center text-sm text-gray-500">{{ $t('common.empty') }}</div>
       </template>
     </UTable>
 

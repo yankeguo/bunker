@@ -9,16 +9,40 @@ const { data: items } = await useGrantedItems();
 
 const { data: uiOptions } = await useUIOptions();
 
-const addressHint = computed(() => {
-  if (uiOptions.value.ssh_host) {
-    if (uiOptions.value.ssh_port) {
-      return `${uiOptions.value.ssh_host} -p ${uiOptions.value.ssh_port}`
-    } else {
-      return uiOptions.value.ssh_host
-    }
+function exampleUser(pattern: string) {
+  if (pattern === "*") {
+    return "root";
   }
-  return 'BUNKER_ADDRESS'
-})
+  if (pattern.includes("*") || pattern.includes("?")) {
+    return "<user>";
+  }
+  return pattern;
+}
+
+function sshCommand(row: { server_user: string; server_id: string }) {
+  const host = uiOptions.value.ssh_host || "BUNKER_ADDRESS";
+  const destination = `${exampleUser(row.server_user)}@${row.server_id}@${host}`;
+  const port = uiOptions.value.ssh_port;
+  if (port && port !== "22") {
+    return `ssh -p ${port} ${destination}`;
+  }
+  return `ssh ${destination}`;
+}
+
+async function copyCommand(command: string) {
+  try {
+    await navigator.clipboard.writeText(command);
+  } catch {
+    const input = document.createElement("textarea");
+    input.value = command;
+    input.setAttribute("readonly", "true");
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+  }
+  useToast().add({ title: $t("common.copied"), color: "green" });
+}
 
 const columns = [
   {
@@ -35,12 +59,6 @@ const columns = [
   }
 ];
 
-function expandServerUser(s: string): string {
-  if (s === '*') {
-    return 'root'
-  }
-  return s
-}
 </script>
 
 <template>
@@ -48,7 +66,7 @@ function expandServerUser(s: string): string {
     <template #left>
       <UCard :ui="uiCard">
         <article v-if="uiOptions.ssh_host" class="prose dark:prose-invert mb-4">
-          <p>Bunker SSH 地址: <span class="font-semibold">{{ uiOptions.ssh_host }}</span><span class="font-semibold"
+          <p>{{ $t('dashboard.ssh_address') }}: <span class="font-semibold">{{ uiOptions.ssh_host }}</span><span class="font-semibold"
               v-if="uiOptions.ssh_port">:{{
                 uiOptions.ssh_port }}</span></p>
         </article>
@@ -57,7 +75,14 @@ function expandServerUser(s: string): string {
     </template>
     <UTable :rows="items.granted_items" :columns="columns">
       <template #example-data="{ row }">
-        <code class="font-mono">ssh {{ expandServerUser(row.server_user) }}@{{ row.server_id }}@{{ addressHint }}</code>
+        <div class="flex items-start gap-2">
+          <code class="font-mono break-all">{{ sshCommand(row) }}</code>
+          <UButton size="2xs" variant="ghost" color="gray" icon="i-mdi-content-copy" :aria-label="$t('dashboard.copy')"
+            @click="copyCommand(sshCommand(row))" />
+        </div>
+      </template>
+      <template #empty-state>
+        <div class="py-6 text-center text-sm text-gray-500">{{ $t('common.empty') }}</div>
       </template>
     </UTable>
   </SkeletonDashboard>

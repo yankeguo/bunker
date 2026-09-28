@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/yankeguo/ufx"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 )
@@ -123,10 +122,4 @@ func CreateSigners(log *zap.SugaredLogger, dir DataDir) (signers *Signers, err e
 	log.Info("\n------- Client Public Keys -------\n" + strings.TrimSpace(signers.AuthorizedKeys) + "\n----------------------------------")
 
 	return
-}
-
-func InstallSignersToRouter(ur ufx.Router, signers *Signers) {
-	ur.HandleFunc("/backend/authorized_keys", func(c ufx.Context) {
-		c.Text(signers.AuthorizedKeys)
-	})
 }

@@ -7,11 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/git-lfs/wildmatch"
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/bunker/model/dao"
 	"github.com/yankeguo/ufx"
@@ -134,17 +132,13 @@ func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey)
 		return
 	}
 
-	// find server
-	splits := strings.Split(conn.User(), "@")
-	if len(splits) != 2 {
-		err = errors.New("invalid user format, should be server_user@server_id")
+	var (
+		serverUser string
+		serverID   string
+	)
+	if serverUser, serverID, err = parseSSHTarget(conn.User()); err != nil {
 		return
 	}
-
-	var (
-		serverUser = splits[0]
-		serverID   = splits[1]
-	)
 
 	var server *model.Server
 	if server, err = db.Server.Where(db.Server.ID.Eq(serverID)).First(); err != nil {
@@ -162,14 +156,8 @@ func (s *SSHServer) PublicKeyCallback(conn ssh.ConnMetadata, _key ssh.PublicKey)
 
 	var granted bool
 
-	// check if user is granted
 	for _, grant := range grants {
-		var (
-			mServerUser = wildmatch.NewWildmatch(grant.ServerUser, wildmatch.Basename, wildmatch.CaseFold)
-			mServerID   = wildmatch.NewWildmatch(grant.ServerID, wildmatch.Basename, wildmatch.CaseFold)
-		)
-
-		if mServerUser.Match(serverUser) && mServerID.Match(serverID) {
+		if grantMatches(grant, serverUser, serverID) {
 			granted = true
 			break
 		}
@@ -200,11 +188,38 @@ func (s *SSHServer) BannerCallback(conn ssh.ConnMetadata) string {
 	)
 }
 
+// securePublicKeyAuthAlgos are the user authentication algorithms bunker accepts.
+// ssh-rsa (SHA-1) and ssh-dss are omitted.
+var securePublicKeyAuthAlgos = []string{
+	ssh.KeyAlgoED25519,
+	ssh.KeyAlgoSKED25519,
+	ssh.KeyAlgoSKECDSA256,
+	ssh.KeyAlgoECDSA256,
+	ssh.KeyAlgoECDSA384,
+	ssh.KeyAlgoECDSA521,
+	ssh.KeyAlgoRSASHA256,
+	ssh.KeyAlgoRSASHA512,
+}
+
+// secureHostKeyAlgos are the host key algorithms bunker will accept from a target.
+var secureHostKeyAlgos = []string{
+	ssh.KeyAlgoED25519,
+	ssh.KeyAlgoECDSA256,
+	ssh.KeyAlgoECDSA384,
+	ssh.KeyAlgoECDSA521,
+	ssh.KeyAlgoRSASHA256,
+	ssh.KeyAlgoRSASHA512,
+}
+
+const maxSSHChannels = 32
+
 func (s *SSHServer) createServerConfig() *ssh.ServerConfig {
 	cfg := &ssh.ServerConfig{
-		AuthLogCallback:   s.AuthLogCallback,
-		PublicKeyCallback: s.PublicKeyCallback,
-		BannerCallback:    s.BannerCallback,
+		AuthLogCallback:         s.AuthLogCallback,
+		PublicKeyCallback:       s.PublicKeyCallback,
+		BannerCallback:          s.BannerCallback,
+		MaxAuthTries:            6,
+		PublicKeyAuthAlgorithms: securePublicKeyAuthAlgos,
 	}
 
 	for _, sgn := range s.signers.Host {
@@ -247,15 +262,12 @@ func dialSSHServer(address string, config *ssh.ClientConfig) (client *ssh.Client
 func (s *SSHServer) HandleServerConn(conn net.Conn) {
 	defer conn.Close()
 
-	var err error
+	// bound the handshake so a client cannot hold a goroutine open
+	_ = conn.SetDeadline(time.Now().Add(sshHandshakeTimeout))
 
-	var (
-		userConn         *ssh.ServerConn
-		chUserNewChannel <-chan ssh.NewChannel
-		chUserRequest    <-chan *ssh.Request
-	)
-
-	if userConn, chUserNewChannel, chUserRequest, err = ssh.NewServerConn(conn, s.createServerConfig()); err != nil {
+	userConn, chUserNewChannel, chUserRequest, err := ssh.NewServerConn(conn, s.createServerConfig())
+	_ = conn.SetDeadline(time.Time{})
+	if err != nil {
 		return
 	}
 	defer userConn.Close()
@@ -283,8 +295,8 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(s.signers.Client...),
 		},
-		// target servers are registered by admins, their host keys are not known in advance
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyAlgorithms: secureHostKeyAlgos,
+		HostKeyCallback:   s.hostKeyCallback(userConn.Permissions.Extensions[sshExtKeyServerID]),
 	}); err != nil {
 		log.With("error", err).Error("ssh dial")
 
@@ -399,26 +411,27 @@ func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerCon
 			log.With("error", err1).Error("ssh accept user channel")
 			return
 		}
+		defer userChannel.Close()
+
+		var copies sync.WaitGroup
+		copies.Add(2)
+		// CloseWrite on EOF so the other direction can still deliver data and
+		// channel requests such as exit-status.
+		go func() {
+			defer copies.Done()
+			defer userChannel.CloseWrite()
+			io.Copy(userChannel, targetChannel)
+			log.Info("channel pipe end: from target")
+		}()
+		go func() {
+			defer copies.Done()
+			defer targetChannel.CloseWrite()
+			io.Copy(targetChannel, userChannel)
+			log.Info("channel pipe end: from user")
+		}()
 
 		wg1 := &sync.WaitGroup{}
-
-		wg1.Add(1)
-		go func() {
-			defer wg1.Done()
-			defer log.Info("channel pipe end: from target")
-			defer userChannel.Close()
-			io.Copy(userChannel, targetChannel)
-		}()
-
-		wg1.Add(1)
-		go func() {
-			defer wg1.Done()
-			defer log.Info("channel pipe end: from user")
-			defer targetChannel.Close()
-			io.Copy(targetChannel, userChannel)
-		}()
-
-		wg1.Add(1)
+		wg1.Add(2)
 		go func() {
 			defer wg1.Done()
 			defer log.Info("channel request end: from target")
@@ -432,8 +445,6 @@ func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerCon
 				}
 			}
 		}()
-
-		wg1.Add(1)
 		go func() {
 			defer wg1.Done()
 			defer log.Info("channel request end: from user")
@@ -448,6 +459,11 @@ func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerCon
 			}
 		}()
 
+		copies.Wait()
+		// closing the channels unblocks request forwarding if the peer never
+		// sends a full close of its own
+		_ = userChannel.Close()
+		_ = targetChannel.Close()
 		wg1.Wait()
 	}
 
@@ -473,9 +489,18 @@ func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerCon
 		defer log.Info("user new chan end")
 
 		wg1 := &sync.WaitGroup{}
+		slots := make(chan struct{}, maxSSHChannels)
 		for userNewChannel := range chUserNewChannel {
-			wg1.Add(1)
-			go handleUserNewChannel(wg1, userNewChannel)
+			select {
+			case slots <- struct{}{}:
+				wg1.Add(1)
+				go func(ch ssh.NewChannel) {
+					defer func() { <-slots }()
+					handleUserNewChannel(wg1, ch)
+				}(userNewChannel)
+			default:
+				userNewChannel.Reject(ssh.ResourceShortage, "too many channels")
+			}
 		}
 		wg1.Wait()
 	}()

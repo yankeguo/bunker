@@ -81,6 +81,8 @@ func InitializeUsers(
 		} else if iu.UpdateExisting {
 			log.With("username", iu.Username).Info("user updated")
 
+			passwordChanged := !user.CheckPassword(iu.Password)
+
 			if err = user.SetPassword(iu.Password); err != nil {
 				return
 			}
@@ -92,6 +94,14 @@ func InitializeUsers(
 				db.User.IsAdmin.Value(iu.IsAdmin),
 			); err != nil {
 				return
+			}
+
+			// a restarted process with update_existing must not keep sessions
+			// that were created with the previous password
+			if passwordChanged {
+				if _, err = db.Token.Where(db.Token.UserID.Eq(iu.Username)).Delete(); err != nil {
+					return
+				}
 			}
 		}
 	}

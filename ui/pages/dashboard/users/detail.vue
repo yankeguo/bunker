@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import type { FormError, FormSubmitEvent } from "#ui/types";
 import { guardWorking } from "~/composables/error";
+import { fill, formatTime } from "~/utils/format";
 
 const { $t } = useNuxtApp()
 
 definePageMeta({
-    middleware: ["auth"],
+    middleware: ["auth", "admin"],
 })
 
 const route = useRoute();
-const userId = route.query.user_id as string;
+const userId = (route.query.user_id as string) || "";
 
 if (!userId) {
-    navigateTo({ name: "dashboard-users" });
+    await navigateTo({ name: "dashboard-users" });
 }
 
 const { data: grants, refresh: refreshGrants } = await useGrants(userId);
@@ -45,8 +46,8 @@ const state = reactive<{
 
 const validate = (state: any): FormError[] => {
     const errors = [];
-    if (!state.server_user) errors.push({ path: "server_user", message: "Required" });
-    if (!state.server_id) errors.push({ path: "server_id", message: "Required" });
+    if (!state.server_user) errors.push({ path: "server_user", message: $t("common.required") });
+    if (!state.server_id) errors.push({ path: "server_id", message: $t("common.required") });
     return errors;
 };
 
@@ -57,10 +58,7 @@ async function onSubmit(event: FormSubmitEvent<any>) {
 
         await $fetch("/backend/grants/create", {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(Object.assign({ user_id: userId }, event.data))
+            body: { user_id: userId, ...event.data },
         })
 
         await refreshGrants()
@@ -69,7 +67,7 @@ async function onSubmit(event: FormSubmitEvent<any>) {
 }
 
 async function deleteGrant({ id, server_user, server_id }: { id: string; server_user: string; server_id: string }) {
-    if (!confirm(`Confirm to delete grant to ${server_user}@${server_id}?`)) {
+    if (!confirm(fill($t('grants.confirm_delete'), { target: `${server_user}@${server_id}` }))) {
         return
     }
 
@@ -77,10 +75,7 @@ async function deleteGrant({ id, server_user, server_id }: { id: string; server_
 
         await $fetch("/backend/grants/delete", {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ id })
+            body: { id },
         })
 
         await refreshGrants()
@@ -122,9 +117,15 @@ async function deleteGrant({ id, server_user, server_id }: { id: string; server_
 
 
         <UTable :rows="grants.grants" :columns="columns">
+            <template #created_at-data="{ row }">
+                {{ formatTime(row.created_at) }}
+            </template>
             <template #actions-data="{ row }">
                 <UButton variant="link" color="red" icon="i-mdi-trash" :label="$t('common.delete')"
                     @click="deleteGrant(row)" :disabled="!!working" :loading="!!working"></UButton>
+            </template>
+            <template #empty-state>
+                <div class="py-6 text-center text-sm text-gray-500">{{ $t('common.empty') }}</div>
             </template>
         </UTable>
 

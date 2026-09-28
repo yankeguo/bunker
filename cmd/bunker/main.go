@@ -42,7 +42,17 @@ func main() {
 		}),
 
 		ufx.ProvideConfFromYAMLFile(filepath.Join(optDataDir, "config.yaml")),
-		ufx.Module,
+
+		fx.Provide(
+			ufx.ProberParamsFromConf,
+			ufx.RouterParamsFromConf,
+			ufx.ServerParamsFromConf,
+			ufx.NewProber,
+			ufx.NewRouter,
+			bunker.NewHTTPServer,
+		),
+		fx.Invoke(ufx.SetupOTEL),
+		fx.Invoke(func(ufx.Server) {}),
 
 		fx.Provide(
 			bunker.CreateDatabase,
@@ -54,7 +64,6 @@ func main() {
 		fx.Invoke(
 			bunker.InitializeUsers,
 			bunker.InstallStaticToRouter,
-			bunker.InstallSignersToRouter,
 			bunker.InstallAppToRouter,
 		),
 
