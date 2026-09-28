@@ -1,5 +1,5 @@
 <template>
-  <UApp :toaster="{ position: 'top-right' }">
+  <UApp :toaster="{ position: 'top-right', class: 'top-20' }">
     <NuxtLoadingIndicator color="#0369a1" />
     <UContainer class="pb-32">
       <NuxtLayout>
