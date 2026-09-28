@@ -234,7 +234,14 @@ func TestSSHDialErrorIsReturnedToTheClient(t *testing.T) {
 	client = dialBunker(t, bunker, userKey, "root@default-port")
 	_, err = runBunkerCommand(client)
 	_ = client.Close()
-	if err == nil || !strings.Contains(err.Error(), "127.0.0.1:22") {
+	if err == nil {
+		t.Fatal("expected the default-port dial to fail")
+	}
+	// A refused dial names 127.0.0.1:22. When sshd already owns that port, TCP
+	// succeeds and the client sees an authentication handshake instead.
+	// Omitting the default port would be "missing port in address".
+	msg := err.Error()
+	if !strings.Contains(msg, "127.0.0.1:22") && !strings.Contains(msg, "unable to authenticate") {
 		t.Fatalf("default port error = %v", err)
 	}
 }
