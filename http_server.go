@@ -98,15 +98,24 @@ func serveProbe(w http.ResponseWriter, _ *http.Request) {
 }
 
 func decodeJSON(r *http.Request, dst any) error {
-	err := json.NewDecoder(r.Body).Decode(dst)
-	if err == nil || errors.Is(err, io.EOF) {
+	dec := json.NewDecoder(r.Body)
+	err := dec.Decode(dst)
+	if errors.Is(err, io.EOF) {
 		return nil
 	}
-	var maxErr *http.MaxBytesError
-	if errors.As(err, &maxErr) {
-		return httpFail(http.StatusRequestEntityTooLarge, "request body is too large")
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return httpFail(http.StatusRequestEntityTooLarge, "request body is too large")
+		}
+		return httpFail(http.StatusBadRequest, "invalid json")
 	}
-	return httpFail(http.StatusBadRequest, "invalid json")
+
+	var extra json.RawMessage
+	if err = dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return httpFail(http.StatusBadRequest, "invalid json")
+	}
+	return nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

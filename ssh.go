@@ -226,9 +226,7 @@ func (s *SSHServer) HandleServerConn(conn net.Conn) {
 		serverAddress = userConn.Permissions.Extensions[sshExtKeyServerAddress]
 	)
 
-	if _, port, _ := net.SplitHostPort(serverAddress); port == "" {
-		serverAddress = net.JoinHostPort(serverAddress, "22")
-	}
+	serverAddress = withDefaultSSHPort(serverAddress)
 
 	log := s.log.With(
 		"remote_addr", conn.RemoteAddr().String(),
@@ -318,20 +316,32 @@ func (s *SSHServer) ListenAndServe() (err error) {
 	}
 }
 
-func (s *SSHServer) Shutdown(ctx context.Context) (err error) {
+// Shutdown stops accepting connections. Sessions already running keep going
+// until the process exits. ctx is accepted so callers can share a timeout
+// with the HTTP server; closing the listener does not wait on it.
+func (s *SSHServer) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	listener := s.listener
 	s.mu.Unlock()
 
 	if listener == nil {
-		return
+		return nil
 	}
 
-	if err = listener.Close(); err != nil && errors.Is(err, net.ErrClosed) {
-		err = nil
+	err := listener.Close()
+	if errors.Is(err, net.ErrClosed) {
+		return nil
 	}
+	return err
+}
 
-	return
+// withDefaultSSHPort adds port 22 when address has none. Bracketed and bare
+// IPv6 addresses are both accepted.
+func withDefaultSSHPort(address string) string {
+	if _, port, _ := net.SplitHostPort(address); port == "" {
+		return net.JoinHostPort(address, "22")
+	}
+	return address
 }
 
 func PipeSSH(log *slog.Logger, target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-chan ssh.NewChannel, chUserRequest <-chan *ssh.Request) {
@@ -345,8 +355,9 @@ func PipeSSH(log *slog.Logger, target *ssh.Client, userConn *ssh.ServerConn, chU
 		targetChannel, chTargetRequest, err1 := target.OpenChannel(userNewChannel.ChannelType(), userNewChannel.ExtraData())
 		if err1 != nil {
 			log.With("error", err1).Error("ssh open target channel")
-			if errOpenFailed, ok := err1.(*ssh.OpenChannelError); ok {
-				userNewChannel.Reject(errOpenFailed.Reason, errOpenFailed.Message)
+			var openErr *ssh.OpenChannelError
+			if errors.As(err1, &openErr) {
+				userNewChannel.Reject(openErr.Reason, openErr.Message)
 			} else {
 				userNewChannel.Reject(ssh.ConnectionFailed, err1.Error())
 			}

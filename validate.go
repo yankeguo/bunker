@@ -62,10 +62,15 @@ func normalizeDisplayName(name string) (string, error) {
 
 func normalizeUserAgent(ua string) string {
 	ua = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(ua, "\n", " "), "\r", " "))
-	if len(ua) > maxUserAgentLen {
-		ua = ua[:maxUserAgentLen]
+	if len(ua) <= maxUserAgentLen {
+		return ua
 	}
-	return ua
+	// walk back so a multibyte rune is not cut in half
+	cut := maxUserAgentLen
+	for cut > 0 && !utf8.ValidString(ua[:cut]) {
+		cut--
+	}
+	return ua[:cut]
 }
 
 // normalizeServerAddress accepts a host, host:port, IPv6, or [IPv6]:port and
@@ -95,7 +100,7 @@ func normalizeServerAddress(address string) (string, error) {
 		return "", errors.New("invalid server address")
 	}
 	for _, label := range strings.Split(host, ".") {
-		if label == "" || len(label) > 63 {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
 			return "", errors.New("invalid server address")
 		}
 		for _, r := range label {

@@ -85,21 +85,23 @@ func InitializeUsers(
 				return
 			}
 
-			if _, err = db.User.Where(
-				db.User.ID.Eq(iu.Username),
-			).UpdateSimple(
-				db.User.PasswordDigest.Value(user.PasswordDigest),
-				db.User.IsAdmin.Value(iu.IsAdmin),
-			); err != nil {
-				return
-			}
-
-			// a restarted process with update_existing must not keep sessions
-			// that were created with the previous password
-			if passwordChanged {
-				if _, err = db.Token.Where(db.Token.UserID.Eq(iu.Username)).Delete(); err != nil {
-					return
+			// password change and session revocation commit together, so a
+			// failure cannot leave the new password with the old sessions
+			err = db.Transaction(func(tx *dao.Query) error {
+				if _, err := tx.User.Where(tx.User.ID.Eq(iu.Username)).UpdateSimple(
+					tx.User.PasswordDigest.Value(user.PasswordDigest),
+					tx.User.IsAdmin.Value(iu.IsAdmin),
+				); err != nil {
+					return err
 				}
+				if !passwordChanged {
+					return nil
+				}
+				_, err := tx.Token.Where(tx.Token.UserID.Eq(iu.Username)).Delete()
+				return err
+			})
+			if err != nil {
+				return
 			}
 		}
 	}
@@ -118,8 +120,7 @@ func CreateDatabase(dir DataDir) (db *gorm.DB, err error) {
 		}
 	}
 
-	dsn := "file:" + filepath.Join(dir.String(), "database.sqlite3") +
-		"?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)"
+	dsn := sqliteDSN(filepath.Join(dir.String(), "database.sqlite3"))
 
 	if db, err = gorm.Open(
 		sqlite.Open(dsn),
@@ -134,6 +135,13 @@ func CreateDatabase(dir DataDir) (db *gorm.DB, err error) {
 		db = db.Debug()
 	}
 	return
+}
+
+// sqliteDSN opens SQLite in WAL mode. Transactions take a reserved lock
+// immediately (BEGIN IMMEDIATE) so check-then-update work, such as refusing
+// to remove the last admin, cannot interleave.
+func sqliteDSN(path string) string {
+	return "file:" + path + "?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_txlock=immediate"
 }
 
 func CloseDatabase(db *gorm.DB) error {

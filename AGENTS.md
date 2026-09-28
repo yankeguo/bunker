@@ -43,12 +43,14 @@ key and pipes the session to the target server using its own client keys (see
 cd ui && npm ci && npm run generate && cd ..
 
 # Backend
-go build ./...          # or: go build -o bunker ./cmd/bunker
+go test ./...
 go vet ./...
+go build ./...          # or: go build -o bunker ./cmd/bunker
 ```
 
-There are no tests in this project; verify changes with `go build`, `go vet`, and a
-smoke run:
+Unit tests live in `*_test.go` beside the code they cover. `go test` needs
+`ui/.output/public` to exist because `static.go` embeds it; CI generates the UI
+before testing. A manual smoke run:
 
 ```bash
 mkdir -p /tmp/data
