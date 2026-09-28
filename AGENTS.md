@@ -22,7 +22,7 @@ key and pipes the session to the target server using its own client keys (see
 - `app.go` — HTTP API routes (under `/backend/...`)
 - `ssh.go` — SSH bastion server and session piping
 - `signers.go` — host/client SSH key generation and loading (stored in the data dir)
-- `database.go` — SQLite (gorm, pure-Go driver `glebarez/sqlite`, WAL + busy timeout)
+- `database.go` — SQLite (gorm, pure-Go driver `libtnb/sqlite`, WAL + busy timeout)
   setup and `users.yaml` seeding
 - `static.go` — embeds `ui/.output/public`, serves it with a `404.html` fallback;
   proxies to `localhost:3000` when `DEBUG=ui`
@@ -43,12 +43,15 @@ key and pipes the session to the target server using its own client keys (see
 cd ui && npm ci && npm run generate && cd ..
 
 # Backend
-go build ./...          # or: go build -o bunker ./cmd/bunker
+go test ./...
 go vet ./...
+go build ./...          # or: go build -o bunker ./cmd/bunker
 ```
 
-There are no tests in this project; verify changes with `go build`, `go vet`, and a
-smoke run:
+Unit tests live in `*_test.go` beside the code they cover. The `e2e` package
+builds `./cmd/bunker` and exercises the HTTP API and SSH proxy through that
+process. `go test` needs `ui/.output/public` to exist because `static.go`
+embeds it; CI generates the UI before testing. A manual smoke run:
 
 ```bash
 mkdir -p /tmp/data

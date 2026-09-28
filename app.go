@@ -95,7 +95,9 @@ func (a *App) clientIP(r *http.Request) string {
 	if a.trustProxy {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			parts := strings.Split(xff, ",")
-			if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {
+			// the trusted proxy appends the peer it saw, so the last entry is
+			// the client address; ignore anything that is not an IP
+			if ip := strings.TrimSpace(parts[len(parts)-1]); net.ParseIP(ip) != nil {
 				return ip
 			}
 		}
@@ -340,24 +342,12 @@ func (a *App) routeSignIn(w http.ResponseWriter, r *http.Request) error {
 
 	a.signInLimiter.Reset(clientIP)
 
-	// delete expired tokens
-	if _, err = db.Token.Where(db.Token.UserID.Eq(user.ID), db.Token.CreatedAt.Lte(time.Now().Add(-tokenTTL))).Delete(); err != nil {
-		return err
-	}
-
-	now := time.Now()
-
-	if _, err = db.User.Where(db.User.ID.Eq(user.ID)).UpdateColumnSimple(db.User.VisitedAt.Value(now)); err != nil {
-		return err
-	}
-	user.VisitedAt = now
-
-	// create token
 	id := make([]byte, 32)
 	if _, err = rand.Read(id); err != nil {
 		return err
 	}
 
+	now := time.Now()
 	token := &model.Token{
 		ID:        hex.EncodeToString(id),
 		UserID:    user.ID,
@@ -366,9 +356,19 @@ func (a *App) routeSignIn(w http.ResponseWriter, r *http.Request) error {
 		VisitedAt: now,
 	}
 
-	if err = db.Token.Create(token); err != nil {
+	// drop expired sessions, touch the user, and store the new token together
+	if err = db.Transaction(func(tx *dao.Query) error {
+		if _, err := tx.Token.Where(tx.Token.UserID.Eq(user.ID), tx.Token.CreatedAt.Lte(now.Add(-tokenTTL))).Delete(); err != nil {
+			return err
+		}
+		if _, err := tx.User.Where(tx.User.ID.Eq(user.ID)).UpdateColumnSimple(tx.User.VisitedAt.Value(now)); err != nil {
+			return err
+		}
+		return tx.Token.Create(token)
+	}); err != nil {
 		return err
 	}
+	user.VisitedAt = now
 
 	http.SetCookie(w, a.sessionCookie(r, token.ID, int(tokenTTL.Seconds())))
 
@@ -573,10 +573,13 @@ func (a *App) routeDeleteServer(w http.ResponseWriter, r *http.Request) error {
 		return httpFail(http.StatusBadRequest, "server id is required")
 	}
 
-	if _, err := db.HostKey.Where(db.HostKey.ServerID.Eq(data.ID)).Delete(); err != nil {
+	if err := db.Transaction(func(tx *dao.Query) error {
+		if _, err := tx.HostKey.Where(tx.HostKey.ServerID.Eq(data.ID)).Delete(); err != nil {
+			return err
+		}
+		_, err := tx.Server.Where(tx.Server.ID.Eq(data.ID)).Delete()
 		return err
-	}
-	if _, err := db.Server.Where(db.Server.ID.Eq(data.ID)).Delete(); err != nil {
+	}); err != nil {
 		return err
 	}
 
@@ -652,10 +655,13 @@ func (a *App) routeCreateUser(w http.ResponseWriter, r *http.Request) error {
 		if err = existing.SetPassword(data.Password); err != nil {
 			return err
 		}
-		if _, err = db.User.Where(db.User.ID.Eq(existing.ID)).UpdateColumnSimple(db.User.PasswordDigest.Value(existing.PasswordDigest)); err != nil {
+		if err = db.Transaction(func(tx *dao.Query) error {
+			if _, err := tx.User.Where(tx.User.ID.Eq(existing.ID)).UpdateColumnSimple(tx.User.PasswordDigest.Value(existing.PasswordDigest)); err != nil {
+				return err
+			}
+			_, err := tx.Token.Where(tx.Token.UserID.Eq(existing.ID)).Delete()
 			return err
-		}
-		if _, err = db.Token.Where(db.Token.UserID.Eq(existing.ID)).Delete(); err != nil {
+		}); err != nil {
 			return err
 		}
 	}
@@ -681,6 +687,7 @@ func (a *App) routeUpdateUser(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	data.ID = strings.TrimSpace(data.ID)
 	if data.ID == "" {
 		return httpFail(http.StatusBadRequest, "user id is required")
 	}
@@ -708,12 +715,14 @@ func (a *App) routeUpdateUser(w http.ResponseWriter, r *http.Request) error {
 		if data.IsBlocked != nil {
 			willBeBlocked = *data.IsBlocked
 		}
-		if target.IsAdmin && !target.IsBlocked && (!willBeAdmin || willBeBlocked) {
+		currentlyActive := target.IsAdmin && !target.IsBlocked
+		willBeActive := willBeAdmin && !willBeBlocked
+		if currentlyActive && !willBeActive {
 			admins, err := tx.User.Where(tx.User.IsAdmin.Is(true), tx.User.IsBlocked.Is(false)).Find()
 			if err != nil {
 				return err
 			}
-			if len(admins) <= 1 {
+			if wouldRemoveLastAdmin(len(admins), currentlyActive, willBeActive) {
 				return httpFail(http.StatusBadRequest, "cannot remove the last admin")
 			}
 		}
@@ -751,6 +760,10 @@ func (a *App) routeListGrants(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	if userID == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"grants": []any{}})
+		return nil
+	}
 
 	db := dao.Use(a.db)
 	grants, err := db.Grant.Where(db.Grant.UserID.Eq(userID)).Order(db.Grant.CreatedAt).Find()
@@ -816,8 +829,19 @@ func (a *App) routeCreateGrant(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"grant": grant})
+	stored, err := db.Grant.Where(db.Grant.ID.Eq(id)).First()
+	if err != nil {
+		return err
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"grant": stored})
 	return nil
+}
+
+// wouldRemoveLastAdmin reports whether a change would leave no active admin.
+// currentlyActive is the target before the change; willBeActive is after it.
+func wouldRemoveLastAdmin(activeCount int, currentlyActive, willBeActive bool) bool {
+	return currentlyActive && !willBeActive && activeCount <= 1
 }
 
 func (a *App) routeDeleteGrant(w http.ResponseWriter, r *http.Request) error {
@@ -904,12 +928,14 @@ func (a *App) routeUpdatePassword(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	db := dao.Use(a.db)
-	if _, err = db.User.Where(db.User.ID.Eq(u.ID)).UpdateColumnSimple(db.User.PasswordDigest.Value(u.PasswordDigest)); err != nil {
+	// keep the password change and the other-session revocation atomic
+	if err = db.Transaction(func(tx *dao.Query) error {
+		if _, err := tx.User.Where(tx.User.ID.Eq(u.ID)).UpdateColumnSimple(tx.User.PasswordDigest.Value(u.PasswordDigest)); err != nil {
+			return err
+		}
+		_, err := tx.Token.Where(tx.Token.UserID.Eq(u.ID), tx.Token.ID.Neq(token.ID)).Delete()
 		return err
-	}
-
-	// sign out every other session after a password change
-	if _, err = db.Token.Where(db.Token.UserID.Eq(u.ID), db.Token.ID.Neq(token.ID)).Delete(); err != nil {
+	}); err != nil {
 		return err
 	}
 

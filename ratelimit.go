@@ -17,6 +17,7 @@ type rateLimiter struct {
 
 	mu      sync.Mutex
 	entries map[string]*rateLimitEntry
+	now     func() time.Time
 }
 
 func newRateLimiter(limit int, window time.Duration) *rateLimiter {
@@ -24,6 +25,7 @@ func newRateLimiter(limit int, window time.Duration) *rateLimiter {
 		limit:   limit,
 		window:  window,
 		entries: map[string]*rateLimitEntry{},
+		now:     time.Now,
 	}
 }
 
@@ -33,16 +35,19 @@ func (l *rateLimiter) Allowed(key string) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	now := time.Now()
+	now := l.now()
 	l.pruneLocked(now)
 
 	entry := l.entries[key]
 	if entry == nil || now.After(entry.reset) {
+		if entry != nil {
+			delete(l.entries, key)
+		}
 		return true, 0
 	}
 
 	if entry.count >= l.limit {
-		return false, time.Until(entry.reset)
+		return false, entry.reset.Sub(now)
 	}
 
 	return true, 0
@@ -53,7 +58,8 @@ func (l *rateLimiter) Fail(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	now := time.Now()
+	now := l.now()
+	l.pruneLocked(now)
 
 	entry := l.entries[key]
 	if entry == nil || now.After(entry.reset) {

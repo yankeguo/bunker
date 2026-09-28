@@ -23,32 +23,34 @@ type User struct {
 	Tokens []Token `json:"tokens,omitempty"`
 }
 
+// CreateUserPassword returns a bcrypt hash of p.
 func CreateUserPassword(p string) (string, error) {
-	var b []byte
-	var err error
-	if b, err = bcrypt.GenerateFromPassword([]byte(p), bcrypt.DefaultCost); err != nil {
+	var u User
+	if err := u.SetPassword(p); err != nil {
 		return "", err
 	}
-	return string(b), nil
+	return u.PasswordDigest, nil
 }
 
-// SetPassword update password for user
-// bcrypt produces clear text encrypted password, no further encoding needed
-func (u *User) SetPassword(p string) (err error) {
-	var b []byte
-	if b, err = bcrypt.GenerateFromPassword([]byte(p), bcrypt.DefaultCost); err != nil {
-		return
+// SetPassword stores a bcrypt hash of p on u.
+func (u *User) SetPassword(p string) error {
+	b, err := bcrypt.GenerateFromPassword([]byte(p), bcrypt.DefaultCost)
+	if err != nil {
+		return err
 	}
 	u.PasswordDigest = string(b)
-	return
+	return nil
 }
 
-// CheckPasswordDigest check a plain password against a bcrypt digest
+// CheckPasswordDigest reports whether password matches a bcrypt digest.
 func CheckPasswordDigest(digest, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(digest), []byte(password)) == nil
 }
 
-// CheckPassword check password
+// CheckPassword reports whether p matches the user's password.
 func (u *User) CheckPassword(p string) bool {
+	if u == nil {
+		return false
+	}
 	return CheckPasswordDigest(u.PasswordDigest, p)
 }

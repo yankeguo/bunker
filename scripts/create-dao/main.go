@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/glebarez/sqlite"
+	"github.com/libtnb/sqlite"
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/rg"
 	"gorm.io/gen"
