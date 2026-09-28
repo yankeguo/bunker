@@ -8,7 +8,7 @@ bunker is a simple bastion (jump host) system for Linux servers. It consists of:
 
 - A Go backend (`*.go` in the repo root, package `bunker`) providing an HTTP API, an SSH
   proxy server, and embedded static UI serving.
-- A Nuxt 3 web UI (`ui/`), statically generated and embedded into the Go binary.
+- A Nuxt 4 web UI (`ui/`), statically generated and embedded into the Go binary.
 
 Users upload SSH public keys in the web UI; admins register target servers and create
 grants (wildmatch patterns on `server_user` and `server_id`). Users then connect with
@@ -32,7 +32,9 @@ key and pipes the session to the target server using its own client keys (see
 - `scripts/create-dao/` — regenerates `model/dao` (run `go run ./scripts/create-dao`
   after changing models; it creates a throwaway `database.sqlite3` in the repo root,
   which is gitignored)
-- `ui/` — Nuxt 3 app (`@nuxt/ui` v2, npm)
+- `ui/` — Nuxt 4 app (`@nuxt/ui` v4, Tailwind CSS v4). Source lives in `ui/app/`
+  (`app.vue`, `pages/`, `components/`, and so on). `nuxt.config.ts` and
+  `package.json` stay at `ui/`.
 
 ## Build & Test
 
@@ -63,8 +65,11 @@ Docker: `docker build .` — but the UI must be generated into `ui/.output/publi
 - The HTTP server is the standard library `net/http` server, with Go 1.22 method
   patterns (`GET /backend/...`, `POST /backend/...`). Do not add a routing
   wrapper.
-- UI dependencies are intentionally kept on their current majors: Nuxt 3 + `@nuxt/ui`
-  v2. Upgrading to Nuxt 4 / `@nuxt/ui` v3+ is a breaking rewrite of the components.
+- The UI is Nuxt 4 with `@nuxt/ui` v4 and Tailwind CSS v4 (CSS-first, no
+  `tailwind.config`). App source is under `ui/app/`. Do not move it back to the
+  Nuxt 3 root layout or to `@nuxt/ui` v2 component APIs. Nuxt 4 requires Node
+  `^22.19.0 || ^24.11.0 || >=26`. `typescript` stays on 6.x because `vue-tsc`
+  3.x does not load TypeScript 7.
 - npm gates dependency install scripts; `esbuild`'s postinstall is approved via the
   `allowScripts` field in `ui/package.json`. Don't remove it.
 

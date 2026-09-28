@@ -2,16 +2,18 @@
 export default defineNuxtConfig({
   devtools: { enabled: true },
   ssr: false,
-  modules: ["@nuxt/ui", "@vueuse/nuxt"],
-  plugins: ["~/plugins/i18n"],
-
-  ui: {
-    icons: ["heroicons", "simple-icons", "mdi", "noto-v1"],
-  },
+  modules: ["@nuxt/ui"],
+  css: ["~/assets/css/main.css"],
 
   colorMode: {
     preference: "dark",
   },
 
-  compatibilityDate: "2024-07-23",
+  icon: {
+    clientBundle: {
+      scan: true,
+    },
+  },
+
+  compatibilityDate: "2026-09-28",
 });

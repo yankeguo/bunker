@@ -6,23 +6,25 @@
     "build": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
+    "typecheck": "nuxt typecheck",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare"
   },
   "devDependencies": {
-    "@vueuse/components": "^12.8.2",
-    "@vueuse/core": "^12.8.2",
-    "@vueuse/nuxt": "^12.8.2",
-    "nuxt": "^3.21.11",
-    "vue": "^3.5.42",
-    "vue-router": "^4.6.4"
+    "nuxt": "^4.5.2",
+    "typescript": "^6.0.3",
+    "vue": "^3.5.43",
+    "vue-router": "^5.3.1",
+    "vue-tsc": "^3.3.11"
   },
   "dependencies": {
+    "@iconify-json/heroicons": "^1.2.3",
     "@iconify-json/mdi": "^1.2.3",
     "@iconify-json/noto-v1": "^1.2.5",
-    "@iconify-json/simple-icons": "^1.2.94",
-    "@nuxt/ui": "^2.22.3",
-    "@tailwindcss/typography": "^0.5.20"
+    "@iconify-json/simple-icons": "^1.2.97",
+    "@nuxt/ui": "^4.11.2",
+    "@tailwindcss/typography": "^0.5.20",
+    "tailwindcss": "^4.3.3"
   },
   "allowScripts": {
     "esbuild@0.28.2": true

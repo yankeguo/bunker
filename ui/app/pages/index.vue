@@ -1,0 +1,63 @@
+<script setup lang="ts">
+import type { FormError, FormSubmitEvent } from "@nuxt/ui";
+import { guardWorking } from "~/composables/error";
+
+const state = reactive({
+  username: undefined,
+  password: undefined,
+});
+
+const validate = (state: any): FormError[] => {
+  const errors = [];
+  if (!state.username) errors.push({ name: "username", message: useNuxtApp().$t("common.required") });
+  if (!state.password) errors.push({ name: "password", message: useNuxtApp().$t("common.required") });
+  return errors;
+};
+
+const working = ref(0);
+
+async function onSubmit(event: FormSubmitEvent<any>) {
+  return guardWorking(working, async () => {
+    await $fetch("/backend/sign_in", {
+      method: "POST",
+      body: event.data,
+    });
+    await refreshCurrentUser();
+    await navigateTo({ name: "dashboard" });
+  });
+}
+
+const { data: currentUser, refresh: refreshCurrentUser } = await useCurrentUser();
+
+if (currentUser.value.user) {
+  await navigateTo({ name: "dashboard" });
+}
+</script>
+
+<template>
+  <div class="absolute top-0 left-0 w-full h-full flex flex-col justify-center items-center">
+    <div class="mb-12 text-center">
+      <div class="font-semibold text-4xl mb-6">Bunker System</div>
+    </div>
+
+    <UCard class="w-80">
+      <UForm :validate="validate" :state="state" class="space-y-4" @submit="onSubmit">
+        <UFormField :label="$t('common.username')" name="username">
+          <UInput v-model="state.username" />
+        </UFormField>
+
+        <UFormField :label="$t('common.password')" name="password">
+          <UInput v-model="state.password" type="password" />
+        </UFormField>
+
+        <UButton
+          type="submit"
+          icon="i-mdi-login"
+          :disabled="!!working"
+          :loading="!!working"
+          :label="$t('common.sign_in')"
+        />
+      </UForm>
+    </UCard>
+  </div>
+</template>
