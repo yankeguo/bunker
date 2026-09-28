@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"mime"
 	"net"
 	"net/http"
@@ -18,8 +19,6 @@ import (
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/bunker/model/dao"
 	"github.com/yankeguo/rg"
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gen/field"
 	"gorm.io/gorm"
@@ -54,7 +53,7 @@ var dummyPasswordDigest = rg.Must(model.CreateUserPassword("bunker-dummy-passwor
 
 type App struct {
 	db      *gorm.DB
-	log     *zap.SugaredLogger
+	log     *slog.Logger
 	signers *Signers
 
 	uiOpts          uiOptions
@@ -68,29 +67,16 @@ type uiOptions struct {
 	SSHPort string `json:"ssh_port"`
 }
 
-type AppOptions struct {
-	fx.In
-
-	DB      *gorm.DB
-	Conf    Config
-	Logger  *zap.SugaredLogger
-	Signers *Signers
-}
-
-func CreateApp(opts AppOptions) (app *App, err error) {
-	app = &App{
-		db:              opts.DB,
-		log:             opts.Logger,
-		signers:         opts.Signers,
+func CreateApp(db *gorm.DB, cfg Config, log *slog.Logger, signers *Signers) *App {
+	return &App{
+		db:              db,
+		log:             log,
+		signers:         signers,
+		uiOpts:          uiOptions{SSHHost: cfg.UI.SSHHost, SSHPort: cfg.UI.SSHPort},
+		trustProxy:      cfg.Server.TrustProxy,
 		signInLimiter:   newRateLimiter(signInRateLimit, signInRateWindow),
 		passwordLimiter: newRateLimiter(passwordRateLimit, passwordRateWindow),
 	}
-
-	app.uiOpts.SSHHost = opts.Conf.UI.SSHHost
-	app.uiOpts.SSHPort = opts.Conf.UI.SSHPort
-	app.trustProxy = opts.Conf.Server.TrustProxy
-
-	return
 }
 
 func checkPassword(p string) error {

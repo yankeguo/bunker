@@ -18,7 +18,7 @@ key and pipes the session to the target server using its own client keys (see
 
 ## Repository Layout
 
-- `cmd/bunker/main.go` — entrypoint, wires everything with `go.uber.org/fx`
+- `cmd/bunker/main.go` — entrypoint; builds the database, keys, HTTP server, and SSH server directly
 - `app.go` — HTTP API routes (under `/backend/...`)
 - `ssh.go` — SSH bastion server and session piping
 - `signers.go` — host/client SSH key generation and loading (stored in the data dir)

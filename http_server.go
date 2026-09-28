@@ -5,18 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
-
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 )
 
 const (
-	startupDelay  = 3 * time.Second
-	shutdownDelay = 3 * time.Second
-
 	// maxRequestBody bounds every request. State-changing routes apply a
 	// tighter limit before decoding JSON.
 	maxRequestBody = 1 << 20
@@ -42,40 +38,27 @@ type HTTPServer struct {
 	srv *http.Server
 }
 
-func NewHTTPServer(lc fx.Lifecycle, cfg Config, app *App, log *zap.SugaredLogger) *HTTPServer {
-	srv := &http.Server{
+func NewHTTPServer(cfg Config, app *App, logger *slog.Logger) *HTTPServer {
+	var errLog *log.Logger
+	if logger != nil {
+		errLog = slog.NewLogLogger(logger.Handler(), slog.LevelError)
+	}
+	return &HTTPServer{srv: &http.Server{
 		Addr:              cfg.Server.Listen,
 		Handler:           newHandler(app),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		MaxHeaderBytes:    1 << 16,
-		ErrorLog:          zap.NewStdLog(log.Desugar()),
-	}
+		ErrorLog:          errLog,
+	}}
+}
 
-	if lc != nil {
-		lc.Append(fx.Hook{
-			OnStart: func(ctx context.Context) error {
-				chErr := make(chan error, 1)
-				go func() {
-					chErr <- srv.ListenAndServe()
-				}()
-				select {
-				case err := <-chErr:
-					return err
-				case <-ctx.Done():
-					return srv.Shutdown(ctx)
-				case <-time.After(startupDelay):
-					return nil
-				}
-			},
-			OnStop: func(ctx context.Context) error {
-				time.Sleep(shutdownDelay)
-				return srv.Shutdown(ctx)
-			},
-		})
-	}
+func (s *HTTPServer) ListenAndServe() error {
+	return s.srv.ListenAndServe()
+}
 
-	return &HTTPServer{srv: srv}
+func (s *HTTPServer) Shutdown(ctx context.Context) error {
+	return s.srv.Shutdown(ctx)
 }
 
 func newHandler(app *App) http.Handler {
@@ -137,7 +120,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_, _ = w.Write(buf)
 }
 
-func writeAPIError(log *zap.SugaredLogger, w http.ResponseWriter, err error) {
+func writeAPIError(log *slog.Logger, w http.ResponseWriter, err error) {
 	var se *statusError
 	if errors.As(err, &se) {
 		writeJSON(w, se.status, map[string]string{"message": se.msg})

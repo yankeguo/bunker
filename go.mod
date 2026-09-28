@@ -6,8 +6,6 @@ require (
 	github.com/git-lfs/wildmatch v1.0.4
 	github.com/glebarez/sqlite v1.11.0
 	github.com/yankeguo/rg v1.3.1
-	go.uber.org/fx v1.24.0
-	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.56.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/gen v0.3.29
@@ -30,9 +28,6 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
-	go.uber.org/dig v1.19.0 // indirect
-	go.uber.org/multierr v1.11.0 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20260824195058-e88cd73687aa // indirect
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect

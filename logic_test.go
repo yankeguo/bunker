@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/yankeguo/bunker/model"
-	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 )
@@ -158,7 +158,7 @@ func TestClassifyHostKey(t *testing.T) {
 
 func TestVerifyHostKeyPinsAndRejectsChange(t *testing.T) {
 	db := openTestDB(t)
-	server := &SSHServer{db: db, log: zap.NewNop().Sugar()}
+	server := &SSHServer{db: db, log: slog.New(slog.DiscardHandler)}
 
 	first := testPublicKey(t)
 	second := testPublicKey(t)
@@ -179,7 +179,7 @@ func TestVerifyHostKeyPinsAndRejectsChange(t *testing.T) {
 
 func TestHTTPServerDoesNotExposePprof(t *testing.T) {
 	app := &App{
-		log:             zap.NewNop().Sugar(),
+		log:             slog.New(slog.DiscardHandler),
 		signInLimiter:   newRateLimiter(signInRateLimit, signInRateWindow),
 		passwordLimiter: newRateLimiter(passwordRateLimit, passwordRateWindow),
 	}

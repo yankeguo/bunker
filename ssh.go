@@ -6,14 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/bunker/model/dao"
-	"go.uber.org/fx"
-	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 )
@@ -29,58 +28,19 @@ type SSHServer struct {
 	listen  string
 	db      *gorm.DB
 	signers *Signers
-	log     *zap.SugaredLogger
+	log     *slog.Logger
 
 	mu       sync.Mutex
 	listener *net.TCPListener
 }
 
-type SSHServerOptions struct {
-	fx.In
-
-	Lifecycle fx.Lifecycle
-	Conf      Config
-	DB        *gorm.DB
-	Signers   *Signers
-	Logger    *zap.SugaredLogger
-}
-
-func CreateSSHServer(opts SSHServerOptions) (s *SSHServer, err error) {
-	s = &SSHServer{
-		listen:  opts.Conf.SSHServer.Listen,
-		signers: opts.Signers,
-		log:     opts.Logger,
-		db:      opts.DB,
+func NewSSHServer(cfg Config, db *gorm.DB, signers *Signers, log *slog.Logger) *SSHServer {
+	return &SSHServer{
+		listen:  cfg.SSHServer.Listen,
+		signers: signers,
+		log:     log,
+		db:      db,
 	}
-
-	if opts.Lifecycle != nil {
-		opts.Lifecycle.Append(fx.Hook{
-			OnStart: func(ctx context.Context) error {
-				chErr := make(chan error, 1)
-				go func() {
-					chErr <- s.ListenAndServe()
-				}()
-				select {
-				case err := <-chErr:
-					return err
-				case <-ctx.Done():
-					return s.Shutdown(ctx)
-				case <-time.After(time.Second * 3):
-					// the listener is assumed to be up; log any later failure
-					go func() {
-						if err := <-chErr; err != nil {
-							s.log.With("error", err).Error("ssh server exited")
-						}
-					}()
-					return nil
-				}
-			},
-			OnStop: func(ctx context.Context) error {
-				return s.Shutdown(ctx)
-			},
-		})
-	}
-	return
 }
 
 func (s *SSHServer) AuthLogCallback(conn ssh.ConnMetadata, method string, err error) {
@@ -374,7 +334,7 @@ func (s *SSHServer) Shutdown(ctx context.Context) (err error) {
 	return
 }
 
-func PipeSSH(log *zap.SugaredLogger, target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-chan ssh.NewChannel, chUserRequest <-chan *ssh.Request) {
+func PipeSSH(log *slog.Logger, target *ssh.Client, userConn *ssh.ServerConn, chUserNewChannel <-chan ssh.NewChannel, chUserRequest <-chan *ssh.Request) {
 	// handle user request for new channel
 	handleUserNewChannel := func(wg *sync.WaitGroup, userNewChannel ssh.NewChannel) {
 		defer wg.Done()
