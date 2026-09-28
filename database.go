@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/libtnb/sqlite"
 	"github.com/yankeguo/bunker/model"
 	"github.com/yankeguo/bunker/model/dao"
 	"gopkg.in/yaml.v3"

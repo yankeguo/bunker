@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/git-lfs/wildmatch v1.0.4
-	github.com/glebarez/sqlite v1.11.0
+	github.com/libtnb/sqlite v1.2.2
 	github.com/yankeguo/rg v1.3.1
 	golang.org/x/crypto v0.56.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -16,7 +16,6 @@ require (
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/glebarez/go-sqlite v1.23.0 // indirect
 	github.com/go-sql-driver/mysql v1.10.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect

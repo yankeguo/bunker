@@ -23,6 +23,47 @@ func TestSQLiteDSNUsesImmediateLock(t *testing.T) {
 	}
 }
 
+func TestDatabasePragmas(t *testing.T) {
+	db := openTestDB(t)
+
+	var mode string
+	if err := db.Raw("PRAGMA journal_mode").Scan(&mode).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !strings.EqualFold(mode, "wal") {
+		t.Fatalf("journal_mode = %q", mode)
+	}
+
+	var timeout int
+	if err := db.Raw("PRAGMA busy_timeout").Scan(&timeout).Error; err != nil {
+		t.Fatal(err)
+	}
+	if timeout != 10000 {
+		t.Fatalf("busy_timeout = %d", timeout)
+	}
+}
+
+func TestLegacyTimeStringStillScans(t *testing.T) {
+	db := openTestDB(t)
+	legacy := time.Date(2024, 8, 5, 12, 0, 0, 0, time.UTC).String()
+	err := db.Exec(
+		`INSERT INTO users (id, password_digest, created_at, visited_at, is_admin, is_blocked) VALUES (?, ?, ?, ?, 0, 0)`,
+		"legacy", "x", legacy, legacy,
+	).Error
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q := dao.Use(db)
+	user, err := q.User.Where(q.User.ID.Eq("legacy")).First()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.CreatedAt.IsZero() || user.CreatedAt.UTC().Format(time.RFC3339) != "2024-08-05T12:00:00Z" {
+		t.Fatalf("created_at = %s", user.CreatedAt)
+	}
+}
+
 func TestCreateDatabaseIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	db, err := CreateDatabase(DataDir(dir))

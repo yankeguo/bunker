@@ -22,7 +22,7 @@ key and pipes the session to the target server using its own client keys (see
 - `app.go` — HTTP API routes (under `/backend/...`)
 - `ssh.go` — SSH bastion server and session piping
 - `signers.go` — host/client SSH key generation and loading (stored in the data dir)
-- `database.go` — SQLite (gorm, pure-Go driver `glebarez/sqlite`, WAL + busy timeout)
+- `database.go` — SQLite (gorm, pure-Go driver `libtnb/sqlite`, WAL + busy timeout)
   setup and `users.yaml` seeding
 - `static.go` — embeds `ui/.output/public`, serves it with a `404.html` fallback;
   proxies to `localhost:3000` when `DEBUG=ui`
