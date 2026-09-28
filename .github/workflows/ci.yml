@@ -40,6 +40,10 @@ jobs:
         working-directory: ui
         run: npm ci
 
+      - name: typecheck ui
+        working-directory: ui
+        run: npm run typecheck
+
       - name: generate ui
         working-directory: ui
         run: npm run generate

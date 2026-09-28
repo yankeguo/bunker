@@ -65,7 +65,7 @@ Liveness and readiness are served at `/debug/alive` and `/debug/ready`. Profilin
 Requirements:
 
 - Go (see the `go` directive in `go.mod` for the minimum version)
-- Node.js 20+ and npm (for the web UI)
+- Node.js 22.19+ (or 24.11+, or 26+) and npm (for the web UI)
 
 The web UI assets are embedded into the binary, so the UI must be generated before compiling:
 
