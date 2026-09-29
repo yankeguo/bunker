@@ -1,97 +1,264 @@
+# Job order is version, then test, then docker-publish and binaries in
+# parallel, then the GitHub Release. version does not check out. A tag the
+# glob accepts but semver rejects (v01.2.3, v1.2.3-, v1.2.3-rc.01, v1.2.3-01)
+# fails in seconds, before tests, the multi-arch image, or six cross-compiles.
+# test.yml is not started by a tag push on its own; this file calls it after
+# version and before any publish.
+#
+# Job outputs are not inherited transitively through test. binaries and
+# release both need version directly (needs: [version, test] and
+# needs: [version, docker, binaries]) so they can read the version string and
+# the prerelease flag. The release is created only after the image push has
+# succeeded, so the release page does not advertise an image tag that failed
+# to push. action-gh-release updates the existing release for this tag on a
+# re-run. Matrix fail-fast stays at the default (true): one target that does
+# not compile stops the other five instead of uploading a partial set.
+#
+# The trigger filter is a GitHub glob, not a regex, matched against the whole
+# tag. Quotes are required because [ is special in YAML. The second pattern
+# admits -rc / -beta / -alpha and any other hyphenated semver pre-release.
+# The glob is wider than semver on purpose (it accepts v01.2.3 and v1.2.3-).
+# The version job is the real check. A bare 1.2.3 does not match, and neither
+# does build metadata (v1.2.3+build): + is awkward in git refs and illegal in
+# a Docker tag. Pre-release suffixes use -.
+#
+# The version job is bash and grep -Eq, with no checkout and no Go. TAG is an
+# environment variable so the ref is not interpolated into the script. ${TAG#v}
+# is bash prefix removal. The expression is semver's grammar: a numeric
+# identifier is 0 or a number without a leading zero; any other pre-release
+# identifier must contain a letter or a hyphen. if ! grep is required under
+# set -euo pipefail. prerelease is the string true or false because job
+# outputs are strings. It drives the GitHub pre-release checkbox and make_latest.
+#
+# Six targets are built on ubuntu-latest: linux/darwin/windows on amd64 and
+# arm64. linux/arm v7, 386, riscv64, and freebsd are not in the matrix. There
+# are no macOS or Windows runners. CGO_ENABLED=0 cross-compiles from Linux;
+# the Dockerfile uses the same flag. The module does not use cgo (pure-Go
+# sqlite). goreleaser is not used.
+#
+# Each leg generates the UI before go build. static.go embeds
+# ui/.output/public, and the release binary is ./cmd/bunker, not the module
+# root (the root package is bunker, not main). There is no version variable,
+# so -ldflags is -s -w only, with -trimpath. Archives are
+# bunker_<version>_<os>_<arch>.tar.gz, and .zip on Windows. The archive
+# contains only the binary at its root (bunker, or bunker.exe). zip -X strips
+# extra zip attributes. The stage directory is mktemp so the workspace is not
+# left holding a binary named bunker. Checkout depth stays at the default (1).
+# Do not set fetch-depth: 0. Release notes come from the GitHub API.
+#
+# upload-artifact v4 and later cannot append files to one artifact name from
+# parallel jobs. Each leg uses a unique name, bunker-<os>-<arch>.
+# download-artifact merges bunker-* (merge-multiple). retention-days is 1
+# because the artifact only has to cross the job boundary; the GitHub Release
+# asset is the durable copy. if-no-files-found: error and
+# fail_on_unmatched_files fail a missing archive instead of publishing a
+# partial release. upload-artifact is v7 and download-artifact is v8. Those
+# two actions do not share a major version. Both are the Node 24 line, as are
+# checkout@v7, setup-go@v7, and setup-node@v7. Node 20 left hosted runners on
+# 2026-09-23. Majors float.
+#
+# SHA256SUMS is generated once, after the merge, in dist/, so every line is a
+# basename and the checksum file does not include itself. Per-archive .sha256
+# sidecars are not added. The release name is the git tag. When body is set,
+# GitHub prepends it to the generated notes. The body states the image tag and
+# the floating-tag rules so the release page matches docker-publish.yml.
+# prerelease is a boolean input. make_latest is a string enum (true / false /
+# legacy), not a boolean, and GitHub expressions have no ternary:
+# cond && 'false' || 'true' yields the string false for a pre-release and the
+# string true for a stable tag, because any non-empty string is truthy.
+# A pre-release must not become the repository's latest release. draft is left
+# unset. This profile does not use immutable releases, so the release is
+# published as soon as the assets are attached and release.prereleased still
+# fires. The release job does not check out the repository.
+#
+# Workflow permissions are the ceiling (contents: write for the release,
+# plus packages / id-token / attestations for docker-publish.yml). Job
+# permissions replace that set. version sets no job-level permissions: it does
+# not check out and its steps do not use the token, so it stays on the ceiling.
+# Concurrency is release-<ref> with cancel-in-progress false, so this file's
+# own group does not cancel a tag build. test.yml's group can still cancel a
+# force-pushed tag; see that file. No workflow_dispatch: a manual run would
+# publish whatever tag filter happened to match, from an arbitrary ref.
+
 name: release
 
 on:
-  workflow_dispatch: {}
   push:
-    branches:
-      - main
     tags:
-      - "v*.*.*"
+      # Whole-tag globs. The second pattern admits -rc / -beta / -alpha
+      # and any other hyphenated semver pre-release.
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: write
+  packages: write
+  attestations: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  version:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      # No checkout. Invalid tags should die before any clone.
+      - name: Validate semver tag
+        id: meta
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          ver="${TAG#v}"
+          # Numeric identifiers: 0 or [1-9][0-9]*. Other pre-release
+          # identifiers must contain a letter or hyphen (rc, rc.1, alpha).
+          # Rejects v01.2.3, v1.2.3-01, v1.2.3-rc.01, v1.2.3+build.
+          semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.((0|[1-9][0-9]*)|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?$'
+          if [ "${TAG}" = "${ver}" ] || ! printf '%s\n' "${ver}" | grep -Eq "${semver}"; then
+            echo "::error::${TAG} is not a supported semver tag (example: v1.2.3 or v1.2.3-rc.1)"
+            exit 1
+          fi
+          pre=false
+          case "${ver}" in
+            *-*) pre=true ;;
+          esac
+          printf 'version=%s\n' "${ver}" >> "${GITHUB_OUTPUT}"
+          printf 'prerelease=%s\n' "${pre}" >> "${GITHUB_OUTPUT}"
+
+  test:
+    needs: version
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
+  docker:
+    needs: test
     permissions:
       contents: read
       packages: write
+      attestations: write
       id-token: write
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    uses: ./.github/workflows/docker-publish.yml
 
+  binaries:
+    needs: [version, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+          - os: windows
+            arch: amd64
+          - os: windows
+            arch: arm64
     steps:
-      - name: checkout
-        uses: actions/checkout@v5
-        with:
-          submodules: recursive
+      - name: Checkout
+        uses: actions/checkout@v7
 
-      - name: setup node
-        uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: setup go
-        uses: actions/setup-go@v5
+      - name: Setup Go
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache: true
 
-      - name: install ui
+      - name: Install UI
         working-directory: ui
         run: npm ci
 
-      - name: typecheck ui
-        working-directory: ui
-        run: npm run typecheck
-
-      - name: generate ui
+      - name: Generate UI
         working-directory: ui
         run: npm run generate
 
-      - name: test
-        run: go test ./...
+      - name: Build archive
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          name="bunker_${VERSION}_${GOOS}_${GOARCH}"
+          stage="$(mktemp -d)"
+          if [ "${GOOS}" = "windows" ]; then
+            bin="bunker.exe"
+            archive="${name}.zip"
+          else
+            bin="bunker"
+            archive="${name}.tar.gz"
+          fi
+          go build -trimpath -ldflags="-s -w" -o "${stage}/${bin}" ./cmd/bunker
+          if [ "${GOOS}" = "windows" ]; then
+            (cd "${stage}" && zip -q -X "${GITHUB_WORKSPACE}/${archive}" "${bin}")
+          else
+            tar -C "${stage}" -czf "${archive}" "${bin}"
+          fi
 
-      - name: vet
-        run: go vet ./...
-
-      - name: build
-        run: go build -o bunker ./cmd/bunker
-
-      - name: docker setup
-        uses: docker/setup-buildx-action@v3
-
-      - name: docker login ghcr
-        uses: docker/login-action@v3
+      - name: Upload archive
+        uses: actions/upload-artifact@v7
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          name: bunker-${{ matrix.os }}-${{ matrix.arch }}
+          path: bunker_${{ needs.version.outputs.version }}_${{ matrix.os }}_${{ matrix.arch }}.*
+          if-no-files-found: error
+          retention-days: 1
 
-      - name: docker login dockerhub
-        uses: docker/login-action@v3
+  release:
+    needs: [version, docker, binaries]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download archives
+        uses: actions/download-artifact@v8
         with:
-          username: ${{ github.actor }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          pattern: bunker-*
+          merge-multiple: true
+          path: dist
 
-      - name: docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |-
-            ghcr.io/${{ github.repository }}
-            ${{ github.repository }}
-          tags: |-
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+      - name: Checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum bunker_* | tee SHA256SUMS
 
-      - name: docker build and push
-        uses: docker/build-push-action@v6
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v3
         with:
-          context: .
-          pull: true
-          push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          name: ${{ github.ref_name }}
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          # String enum, not a boolean. Yields the string false for a pre-release.
+          make_latest: ${{ needs.version.outputs.prerelease == 'true' && 'false' || 'true' }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            Docker image: `ghcr.io/${{ github.repository }}:${{ needs.version.outputs.version }}`
+            Docker image: `${{ github.repository }}:${{ needs.version.outputs.version }}`
+
+            Stable tags also publish `major.minor` and `major` image tags on both GHCR and Docker Hub. Floating tags that are only a leading zero (`0`, `0.0`) are omitted. Pre-release tags (for example `-rc.1`, `-beta.2`, `-alpha`) publish the full version only and are marked as GitHub pre-releases.
+          files: |
+            dist/bunker_*
+            dist/SHA256SUMS

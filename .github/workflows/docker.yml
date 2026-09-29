@@ -1,0 +1,69 @@
+# Push to main runs tests, then docker-publish.yml. Tag rules live only in
+# that called file, so this file does not copy them. Pull requests and other
+# branches run test.yml only. Tags are not a trigger here; release.yml is the
+# tag entry point and calls the same publish workflow. A tag pointing at main
+# does not publish :latest by itself. :latest moves when main moves.
+#
+# The trigger is the literal branch name main. GitHub evaluates
+# on.push.branches before the event payload exists, so
+# github.event.repository.default_branch cannot be used there. Running on
+# every branch and skipping with an if was rejected: the workflow would still
+# be scheduled for feature branches. The second guard is inside
+# docker-publish.yml (enable={{is_default_branch}}). If main is no longer the
+# default branch, that expression is false, no tag is produced, and the
+# publish fails on purpose instead of pushing :latest from a non-default branch.
+#
+# There is no commit-SHA tag and no per-branch tag. type=sha and
+# type=ref,event=branch were removed. main publishes only :latest. Semver tags
+# publish only semver. None of the workflow files defines workflow_dispatch;
+# a manual run would republish :latest from whatever ref was dispatched.
+#
+# Workflow permissions are the ceiling. Job permissions replace that set for
+# the job; they do not merge. The test job repeats contents: read and does
+# not receive packages: write. The publish job repeats the full ceiling,
+# including id-token: write and attestations: write, because
+# docker/build-push-action provenance attestations are on by default. Dropping
+# those two fails the push at attestation time. packages: write is the GHCR
+# push. Docker Hub uses the DOCKERHUB_TOKEN secret passed into
+# docker-publish.yml, not a GITHUB_TOKEN permission.
+#
+# The concurrency group is docker-<ref>, distinct from bunker-test-<ref>.
+# cancel-in-progress is true so a newer push to main replaces an in-progress
+# :latest build. A called workflow occupies its own group as well as this one.
+
+name: docker
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Job-level permissions replace the workflow-level set for this job; they
+  # do not merge. Repeat contents: read even though the workflow already has
+  # it, and do not inherit packages: write into the test job.
+  test:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
+  publish:
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    uses: ./.github/workflows/docker-publish.yml

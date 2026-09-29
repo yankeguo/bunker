@@ -1,0 +1,100 @@
+# Tests are the only job that runs on pull requests and on pushes to branches
+# other than main. docker.yml (push to main) and release.yml (v* semver tag)
+# call this file with workflow_call and publish only after it succeeds.
+# workflow_run was rejected: it reads the workflow from the default branch,
+# checks out github.event.workflow_run.head_sha instead of github.sha, and
+# makes the token permissions awkward. workflow_call keeps the gate in the
+# same run as the publish.
+#
+# main is branches-ignore'd on purpose. A push there already runs docker.yml,
+# which calls this file before publishing :latest. Listing main here too would
+# run the suite twice. Tag pushes are not branch pushes, so they do not start
+# this file directly; release.yml calls it. on.workflow_call filters are not
+# applied when another workflow calls this file, so branches-ignore does not
+# block docker.yml or release.yml.
+#
+# Pull requests into any base branch are tested. There is no paths filter:
+# a change under an internal package or a workflow edit can both affect what
+# ships. None of the workflow files defines workflow_dispatch.
+#
+# This file grants only contents: read. That checks out the repo and runs the
+# suite. Publish permissions are not granted here. A called workflow can only
+# narrow the caller's token, so docker.yml and release.yml grant contents: read
+# on the job that calls this file. secrets.GITHUB_TOKEN is already available.
+# secrets: inherit is not required. Docker Hub's DOCKERHUB_TOKEN is passed
+# only into docker-publish.yml.
+#
+# The concurrency prefix stays bunker-test-. Inside workflow_call,
+# github.workflow is the caller's name. A group equal to the caller's
+# docker-<ref> or release-<ref> is cancelled with a concurrency deadlock.
+# cancel-in-progress is true so a newer commit on the same ref replaces a
+# stale run. Force-pushing the same tag can still cancel an in-progress
+# release through this group, because the called workflow's concurrency
+# applies to the caller run. Normal tag pushes use a unique ref. Do not
+# remove this group, and do not set cancel-in-progress to false to avoid
+# that tag side effect.
+#
+# The suite is go test ./... with the race detector left off. go vet is not
+# a separate step. This repo also typechecks and generates the Nuxt UI first:
+# static.go embeds ui/.output/public, so the package does not compile until
+# npm run generate has written that tree. npm run typecheck stays in this job
+# so a UI type error fails the same gate and cannot publish.
+#
+# Action majors float. On 2026-09-23 GitHub removed Node 20 from hosted
+# runners, so the Node 24 majors are checkout@v7, setup-go@v7, and
+# setup-node@v7 (this repo's extra step). go-version-file reads the go line
+# in go.mod. Do not also set go-version. Node 22 is the UI toolchain from
+# AGENTS.md, not the action runtime. Timeout is 15 minutes.
+
+name: test
+
+on:
+  workflow_call:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bunker-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Install UI
+        working-directory: ui
+        run: npm ci
+
+      - name: Typecheck UI
+        working-directory: ui
+        run: npm run typecheck
+
+      - name: Generate UI
+        working-directory: ui
+        run: npm run generate
+
+      - name: Test
+        run: go test ./...

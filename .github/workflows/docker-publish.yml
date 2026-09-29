@@ -1,0 +1,162 @@
+# Called by docker.yml (push to main) and release.yml (semver tag). This is
+# the only place image tags and the image build are defined. A
+# workflow_call-only file does not appear as its own Actions button.
+#
+# Tag policy, both ghcr.io/<owner>/<repo> and Docker Hub <owner>/<repo>
+# (the install docs publish yankeguo/bunker; both registries get the same
+# tags). metadata-action lowercases the image name. {{version}} strips the
+# leading v and keeps a pre-release suffix, so v1.2.3-rc.1 becomes 1.2.3-rc.1.
+#
+#   Push to the default branch: latest
+#   Tag v1.2.3: 1.2.3, 1.2, 1
+#   Tag v1.2.3-rc.1 (any pre-release): 1.2.3-rc.1
+#   Tag v0.2.0: 0.2.0, 0.2
+#   Tag v0.0.1: 0.0.1
+#
+# No type=sha and no type=ref. Commit SHAs and branch names are not image tags.
+#
+# :latest tracks the default branch only. A release tag must not move it.
+# flavor latest=false is required because the default latest=auto adds :latest
+# for type=semver. latest=false alone would also stop the default branch from
+# publishing :latest, so type=raw,value=latest,enable={{is_default_branch}} is
+# the explicit :latest. {{is_default_branch}} is a metadata-action Handlebars
+# expression: true for a default-branch push, false for a tag. GitHub's ${{ }}
+# and the action's {{ }} are different languages. Both appear in tags: on
+# purpose. Do not set flavor back to latest=auto.
+#
+# {{major}}.{{minor}} and {{major}} are omitted when the channel would be only
+# a leading zero. v0.2.0 disables major 0 and keeps 0.2. v0.0.1 disables 0 and
+# 0.0 and still publishes 0.0.1 from {{version}}. v0.10.0 disables major 0 and
+# keeps 0.10, because refs/tags/v0.10.0 does not have the prefix
+# refs/tags/v0.0. The enables are GitHub expressions (the action expects the
+# literal strings true or false), and the prefix includes v because tags are
+# v-prefixed. On a branch push the ref is refs/heads/<branch>, both enables
+# are true, and that is harmless: type=semver emits nothing unless the event
+# is a tag. A pre-release does not move floating channels either: metadata-action
+# renders {{major}} as the full pre-release string and dedupes it with
+# {{version}}. Disabling the zero channels is still required for stable 0.x.
+#
+# There is no version variable to stamp, so there is no -X ldflag and no
+# REVISION build-arg. The image and the release archives both use
+# CGO_ENABLED=0, -trimpath, and -ldflags "-s -w". Those flags are in the
+# Dockerfile. .git is in .dockerignore; the image does not read a SHA from it.
+# The runtime image stays scratch: the binary is static and the container only
+# carries /bunker and /data. It is not Alpine.
+#
+# The UI is generated on the runner before Buildx. static.go embeds
+# ui/.output/public, and that tree is platform-independent, so the arm64 leg
+# does not run npm under QEMU. Platforms are linux/amd64 and linux/arm64.
+# setup-qemu-action runs before Buildx because hosted runners are amd64 and
+# the Dockerfile compiles inside the target-arch golang image.
+#
+# Login is ghcr.io with github.actor and secrets.GITHUB_TOKEN, then Docker Hub
+# with github.actor and DOCKERHUB_TOKEN. That secret is declared on
+# workflow_call and passed by the caller. secrets: inherit is not used.
+# Provenance stays at build-push-action's default (on), which is why the caller
+# grants id-token: write and attestations: write. SBOM generation stays off.
+# labels and annotations are both passed through. Cache scope is the fixed
+# string bunker (not the git ref) so a tag build reuses main's layers; mode=max.
+# Last write wins if main and a tag push share the cache. That is acceptable.
+#
+# Require image tags runs before the push. An empty tag list (a tag shape
+# metadata-action cannot parse, or a branch that is not the default) would
+# otherwise error opaquely or push an untagged manifest.
+#
+# Timeout is 45 minutes because the arm64 leg runs under QEMU. docker/metadata-action
+# v5 and docker/build-push-action v6 predate the Node 20 removal on 2026-09-23;
+# this file uses metadata-action v6 and build-push-action v7. setup-node is v7
+# for the same reason. Majors float; commit SHAs are not pinned.
+
+name: docker-publish
+
+on:
+  workflow_call:
+    secrets:
+      DOCKERHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install UI
+        working-directory: ui
+        run: npm ci
+
+      - name: Generate UI
+        working-directory: ui
+        run: npm run generate
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}
+            ${{ github.repository }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.0.') }}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+
+      - name: Require image tags
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAGS}" ]; then
+            echo "::error::no Docker tags generated for ${GITHUB_REF}"
+            exit 1
+          fi
+          printf '%s\n' "${TAGS}"
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha,scope=bunker
+          cache-to: type=gha,mode=max,scope=bunker

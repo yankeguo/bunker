@@ -6,7 +6,7 @@ WORKDIR /go/src/app
 
 ADD . .
 
-RUN go build -o /bunker ./cmd/bunker
+RUN go build -trimpath -ldflags="-s -w" -o /bunker ./cmd/bunker
 
 FROM scratch
 

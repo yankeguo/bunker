@@ -75,6 +75,25 @@ cd ..
 go build -o bunker ./cmd/bunker
 ```
 
+## 持续集成
+
+测试和镜像构建会先生成 Web 界面（`ui/.output/public` 会被嵌入二进制文件）。发布的二进制来自 `./cmd/bunker`。同一套镜像标签会同时推到 GHCR 和 Docker Hub。
+
+| 事件 | 会运行什么 |
+| --- | --- |
+| Pull request，或推送到 `main` 以外的分支 | `go test ./...` |
+| 推送到 `main` | 同样的测试，然后发布 `ghcr.io/yankeguo/bunker:latest` 和 `yankeguo/bunker:latest` |
+| 推送 semver 标签（`v1.2.3`、`v1.2.3-rc.1`，以及其他带 `-` 的预发布） | 同样的测试、semver 镜像标签，以及 GitHub Release |
+
+| Git 标签 | 镜像标签 |
+| --- | --- |
+| `v1.2.3` | `1.2.3`、`1.2`、`1` |
+| `v1.2.3-rc.1` | `1.2.3-rc.1` |
+| `v0.2.0` | `0.2.0`、`0.2` |
+| `v0.0.1` | `0.0.1` |
+
+Docker 标签会去掉开头的 `v`。没有 commit SHA 标签。预发布后缀（`-rc`、`-beta`、`-alpha`，以及其他 semver 预发布）只发布完整版本。仅由前导零组成的浮动标签（`0`、`0.0`）不会发布。预发布标签会标成 GitHub pre-release，也不会成为仓库的 latest release。每个 GitHub Release 附带 `SHA256SUMS`，以及 Linux、macOS、Windows 在 amd64 和 arm64 上各一份压缩包（Windows 为 `.zip`，其余为 `.tar.gz`）。包内的二进制文件是 `bunker`（Windows 上是 `bunker.exe`）。
+
 ## 许可证
 
 GUO YANKE, MIT License

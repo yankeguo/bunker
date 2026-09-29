@@ -77,6 +77,25 @@ cd ..
 go build -o bunker ./cmd/bunker
 ```
 
+## Continuous integration
+
+Tests and image builds generate the web UI first (`ui/.output/public` is embedded into the binary). The release binary is `./cmd/bunker`. The same image tags are pushed to GHCR and Docker Hub.
+
+| Event | What runs |
+| --- | --- |
+| Pull request, or a push to any branch other than `main` | `go test ./...` |
+| Push to `main` | the same tests, then `ghcr.io/yankeguo/bunker:latest` and `yankeguo/bunker:latest` |
+| Push of a semver tag (`v1.2.3`, `v1.2.3-rc.1`, and any other `-` pre-release) | the same tests, semver image tags, and a GitHub Release |
+
+| Git tag | Image tags |
+| --- | --- |
+| `v1.2.3` | `1.2.3`, `1.2`, `1` |
+| `v1.2.3-rc.1` | `1.2.3-rc.1` |
+| `v0.2.0` | `0.2.0`, `0.2` |
+| `v0.0.1` | `0.0.1` |
+
+Docker tags drop the leading `v`. There is no commit-SHA tag. Pre-release suffixes (`-rc`, `-beta`, `-alpha`, and any other semver pre-release) publish the full version only. Floating tags that would be only a leading zero (`0`, `0.0`) are not published. A pre-release tag is marked as a GitHub pre-release and is not made the repository's latest release. Each GitHub Release attaches `SHA256SUMS` and an archive per mainstream OS and architecture: Linux, macOS, and Windows, on amd64 and arm64 (`.tar.gz`, or `.zip` on Windows). The binary inside is `bunker` (`bunker.exe` on Windows).
+
 ## Credits
 
 GUO YANKE, MIT License
